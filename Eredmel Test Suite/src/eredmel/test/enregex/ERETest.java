@@ -30,7 +30,9 @@ public class ERETest {
 	}
 	@Test
 	public void argTest() {
-		ERETestUtil.assertMatch("\\(@.+#,@.+#\\)", "((),()) (,)",
+		ERETestUtil.assertMatch("\\(@.*#,@.*#\\)", "((),()) (,)",
+				new int[][] { { 0, 7 }, { 8, 11 } });
+		ERETestUtil.assertMatch("\\(@.*#,@.*#\\)", "((),()) (,)",
 				new int[][] { { 0, 7 }, { 8, 11 } });
 	}
 }
