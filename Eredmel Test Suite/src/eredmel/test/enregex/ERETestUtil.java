@@ -1,10 +1,11 @@
 package eredmel.test.enregex;
 
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
 import enregex.matcher.EREMatch;
 import enregex.matcher.EREMatcher;
 
-public class EREUtilities {
+public class ERETestUtil {
 	public static void assertMatch(String enregex, String text,
 			int[][] startends) {
 		assertMatch(new EREMatcher(enregex, text), startends);
@@ -15,5 +16,6 @@ public class EREUtilities {
 			assertArrayEquals(startends[i],
 					new int[] { match.start(), match.end() });
 		}
+		assertEquals(null, mat.find());
 	}
 }
