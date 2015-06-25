@@ -36,9 +36,8 @@
  */
 package jregex;
 
-import java.util.Enumeration;
+import java.util.ArrayList;
 import java.util.Hashtable;
-import java.util.Vector;
 
 class Term implements REFlags {
 	// runtime Term types
@@ -182,7 +181,7 @@ class Term implements REFlags {
 		// memreg,counter,depth,lookahead
 		int[] vars = { 1, 0, 0, 0 }; // don't use counters[0]
 		// collect iterators for subsequent optimization
-		Vector<Iterator> iterators = new Vector<Iterator>();
+		ArrayList<TermIterator> iterators = new ArrayList<TermIterator>();
 		Hashtable<String, Integer> groupNames = new Hashtable<String, Integer>();
 		Pretokenizer t = new Pretokenizer(data, offset, end);
 		Term term = makeTree(t, data, vars, flags, new Group(), iterators,
@@ -198,11 +197,7 @@ class Term implements REFlags {
 		Term optimized = first;
 		Optimizer opt = Optimizer.find(first);
 		if (opt != null) optimized = opt.makeFirst(first);
-		Enumeration<Iterator> en = iterators.elements();
-		while (en.hasMoreElements()) {
-			Iterator i = en.nextElement();
-			i.optimize();
-		}
+		iterators.forEach(TermIterator::optimize);
 		// ===
 		re.root = optimized;
 		re.root0 = first;
@@ -212,7 +207,7 @@ class Term implements REFlags {
 		re.namedGroupMap = groupNames;
 	}
 	private static Term makeTree(Pretokenizer t, char[] data, int[] vars,
-			int flags, Term term, Vector<Iterator> iterators,
+			int flags, Term term, ArrayList<TermIterator> iterators,
 			Hashtable<String, Integer> groupNames)
 			throws PatternSyntaxException {
 		// System.out.println("Term.makeTree(): flags="+flags);
@@ -427,7 +422,7 @@ class Term implements REFlags {
 		return n;
 	}
 	protected void append(int offset, int end, char[] data, int[] vars,
-			int flags, Vector<Iterator> iterators,
+			int flags, ArrayList<TermIterator> iterators,
 			Hashtable<String, Integer> gmap) throws PatternSyntaxException {
 		// System.out.println("append("+new
 		// String(data,offset,end-offset)+")");
@@ -709,7 +704,7 @@ class Term implements REFlags {
 		// System.out.println();
 	}
 	private final static Term makeGreedyStar(int[] vars, Term term,
-			Vector<Iterator> iterators) throws PatternSyntaxException {
+			ArrayList<TermIterator> iterators) throws PatternSyntaxException {
 		// vars[STACK_SIZE]++;
 		switch (term.type) {
 			case GROUP_IN: {
@@ -723,7 +718,7 @@ class Term implements REFlags {
 				return b;
 			}
 			default: {
-				Iterator i = new Iterator(term, 0, -1, iterators);
+				TermIterator i = new TermIterator(term, 0, -1, iterators);
 				return i;
 			}
 		}
@@ -754,7 +749,7 @@ class Term implements REFlags {
 		}
 	}
 	private final static Term makeGreedyPlus(int[] vars, Term term,
-			Vector<Iterator> iterators) throws PatternSyntaxException {
+			ArrayList<TermIterator> iterators) throws PatternSyntaxException {
 		// vars[STACK_SIZE]++;
 		switch (term.type) {
 			case INDEPENDENT_IN:// ?
@@ -773,7 +768,7 @@ class Term implements REFlags {
 				return b;
 			}
 			default: {
-				return new Iterator(term, 1, -1, iterators);
+				return new TermIterator(term, 1, -1, iterators);
 			}
 		}
 	}
@@ -852,7 +847,7 @@ class Term implements REFlags {
 		}
 	}
 	private final static Term makeGreedyLimits(int[] vars, Term term,
-			int[] limits, Vector<Iterator> iterators)
+			int[] limits, ArrayList<TermIterator> iterators)
 			throws PatternSyntaxException {
 		// vars[STACK_SIZE]++;
 		int m = limits[0];
@@ -895,7 +890,7 @@ class Term implements REFlags {
 				return reset;
 			}
 			default: {
-				return new Iterator(term, limits[0], limits[1], iterators);
+				return new TermIterator(term, limits[0], limits[1], iterators);
 			}
 		}
 	}
@@ -1531,10 +1526,10 @@ class Term implements REFlags {
 		return b.toString();
 	}
 	public String toStringAll() {
-		return toStringAll(new Vector<Integer>());
+		return toStringAll(new ArrayList<Integer>());
 	}
-	public String toStringAll(Vector<Integer> v) {
-		v.addElement(new Integer(instanceNum));
+	public String toStringAll(ArrayList<Integer> v) {
+		v.add(new Integer(instanceNum));
 		String s = toString();
 		if (next != null) {
 			if (!v.contains(new Integer(next.instanceNum))) {
@@ -2036,10 +2031,10 @@ class Lookbehind extends Term {
 		super.close();
 	}
 }
-class Iterator extends Term {
-	Iterator(Term term, int min, int max, Vector<Iterator> collection)
+class TermIterator extends Term {
+	TermIterator(Term term, int min, int max, ArrayList<TermIterator> collection)
 			throws PatternSyntaxException {
-		collection.addElement(this);
+		collection.add(this);
 		switch (term.type) {
 			case CHAR:
 			case ANY_CHAR:

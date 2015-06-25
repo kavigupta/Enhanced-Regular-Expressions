@@ -38,8 +38,8 @@ package jregex;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.util.ArrayList;
 import java.util.NoSuchElementException;
-import java.util.Vector;
 
 /**
  * Matcher instance is an automaton that actually performs matching. It provides
@@ -157,6 +157,8 @@ public class Matcher implements MatchResult {
 	 * <pre>
 	 * Matcher m = new Pattern(&quot;\\w+&quot;).matcher(myString);
 	 * if (m.find()) m.setTarget(m, m.SUFFIX); // forget all that is not a suffix
+	 * 
+	 * 
 	 * 
 	 * 
 	 * 
@@ -820,18 +822,18 @@ public class Matcher implements MatchResult {
 	}
 	/**
    */
-	public Vector<String> groupv() {
+	public ArrayList<String> groupv() {
 		MemReg[] memregs = this.memregs;
-		Vector<String> v = new Vector<String>();
+		ArrayList<String> v = new ArrayList<String>();
 		MemReg mr;
 		for (int i = 0; i < memregs.length; i++) {
 			mr = bounds(i);
 			if (mr == null) {
-				v.addElement("empty");
+				v.add("empty");
 				continue;
 			}
 			String s = getString(mr.in, mr.out);
-			v.addElement(s);
+			v.add(s);
 		}
 		return v;
 	}

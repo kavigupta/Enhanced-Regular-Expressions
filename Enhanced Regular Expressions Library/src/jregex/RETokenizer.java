@@ -38,7 +38,7 @@ package jregex;
 
 import java.io.IOException;
 import java.io.Reader;
-import java.util.Enumeration;
+import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 /**
@@ -72,7 +72,7 @@ import java.util.NoSuchElementException;
  * 
  * @see Pattern#tokenizer(java.lang.String)
  */
-public class RETokenizer implements Enumeration<String> {
+public class RETokenizer implements Iterator<String> {
 	private Matcher matcher;
 	private boolean checked;
 	private boolean hasToken;
@@ -165,14 +165,14 @@ public class RETokenizer implements Enumeration<String> {
 		// m.setTarget(m.suffix());
 	}
 	@Override
-	public boolean hasMoreElements() {
+	public boolean hasNext() {
 		return hasMore();
 	}
 	/**
 	 * @return a next token as a String
 	 */
 	@Override
-	public String nextElement() {
+	public String next() {
 		return nextToken();
 	}
 	/*

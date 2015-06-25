@@ -37,13 +37,13 @@
 package jregex.util.io;
 
 import java.io.File;
-import java.util.Enumeration;
+import java.util.Iterator;
 import java.util.NoSuchElementException;
 
-class PathElementEnumerator implements Enumeration<File> {
+class PathElementEnumerator implements Iterator<File> {
 	private PathElementEnumerator nextPEE;
 	private PathElementMask mask;
-	protected Enumeration<File> entries;
+	protected Iterator<File> entries;
 	private File nextObj;
 	PathElementEnumerator() {}
 	PathElementEnumerator(PathElementMask mask) {
@@ -55,11 +55,11 @@ class PathElementEnumerator implements Enumeration<File> {
 		entries = mask.elements(f);
 	}
 	@Override
-	public boolean hasMoreElements() {
+	public boolean hasNext() {
 		return (nextObj != null || getNext());
 	}
 	@Override
-	public File nextElement() {
+	public File next() {
 		if (nextObj == null && !getNext())
 			throw new NoSuchElementException();
 		File tmp = nextObj;
@@ -70,17 +70,17 @@ class PathElementEnumerator implements Enumeration<File> {
 		if (nextPEE == null) {
 			return (nextObj = nextPathEntry()) != null;
 		} else {
-			while (!nextPEE.hasMoreElements()) {
+			while (!nextPEE.hasNext()) {
 				File f = nextPathEntry();
 				if (f == null) return false;
 				nextPEE.setDir(f);
 			}
-			nextObj = nextPEE.nextElement();
+			nextObj = nextPEE.next();
 			return true;
 		}
 	}
 	private File nextPathEntry() {
-		if (entries == null || !entries.hasMoreElements()) return null;
-		return entries.nextElement();
+		if (entries == null || !entries.hasNext()) return null;
+		return entries.next();
 	}
 }

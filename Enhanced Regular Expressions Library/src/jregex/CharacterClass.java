@@ -36,10 +36,9 @@
  */
 package jregex;
 
-import java.util.Enumeration;
+import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.StringTokenizer;
-import java.util.Vector;
 
 class CharacterClass extends Term implements UnicodeConstants {
 	static final Bitset DIGIT = new Bitset();
@@ -56,9 +55,9 @@ class CharacterClass extends Term implements UnicodeConstants {
 	static final Bitset UNONSPACE = new Bitset();
 	private static boolean namesInitialized = false;
 	static final Hashtable<String, Bitset> namedClasses = new Hashtable<>();
-	static final Vector<String> unicodeBlocks = new Vector<>();
-	static final Vector<String> posixClasses = new Vector<>();
-	static final Vector<String> unicodeCategories = new Vector<>();
+	static final ArrayList<String> unicodeBlocks = new ArrayList<>();
+	static final ArrayList<String> posixClasses = new ArrayList<>();
+	static final ArrayList<String> unicodeCategories = new ArrayList<>();
 	// modes; used in parseGroup(()
 	private final static int ADD = 1;
 	private final static int SUBTRACT = 2;
@@ -114,9 +113,9 @@ class CharacterClass extends Term implements UnicodeConstants {
 		initPosixClasses();
 	}
 	private static void registerClass(String name, Bitset cls,
-			Vector<String> realm) {
+			ArrayList<String> realm) {
 		namedClasses.put(name, cls);
-		if (!realm.contains(name)) realm.addElement(name);
+		if (!realm.contains(name)) realm.add(name);
 	}
 	private static void initPosixClasses() {
 		Bitset lower = new Bitset();
@@ -802,11 +801,10 @@ class CharacterClass extends Term implements UnicodeConstants {
 		 * }
 		 */
 	}
-	private static void printRealm(Vector<String> realm, String name) {
+	private static void printRealm(ArrayList<String> realm, String name) {
 		System.out.println(name + ":");
-		Enumeration<String> e = realm.elements();
-		while (e.hasMoreElements()) {
-			System.out.println("  " + e.nextElement());
+		for (String s : realm) {
+			System.out.println("  " + s);
 		}
 	}
 }

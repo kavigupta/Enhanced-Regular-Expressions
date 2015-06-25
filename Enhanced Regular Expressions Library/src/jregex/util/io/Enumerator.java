@@ -36,18 +36,18 @@
  */
 package jregex.util.io;
 
-import java.util.Enumeration;
+import java.util.Iterator;
 import java.util.NoSuchElementException;
 
-abstract class Enumerator<T> implements Enumeration<T> {
+abstract class Enumerator<T> implements Iterator<T> {
 	protected T currObj;
 	protected abstract boolean find();
 	@Override
-	public boolean hasMoreElements() {
+	public boolean hasNext() {
 		return currObj != null || find();
 	}
 	@Override
-	public T nextElement() {
+	public T next() {
 		if (currObj == null && !find()) throw new NoSuchElementException();
 		T tmp = currObj;
 		currObj = null;

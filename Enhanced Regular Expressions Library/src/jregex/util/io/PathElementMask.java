@@ -37,7 +37,7 @@
 package jregex.util.io;
 
 import java.io.File;
-import java.util.Enumeration;
+import java.util.Iterator;
 import java.util.Stack;
 
 import jregex.Matcher;
@@ -50,7 +50,7 @@ abstract class PathElementMask {
 	protected PathElementMask(boolean dirsOnly) {
 		this.dirsOnly = dirsOnly;
 	}
-	public abstract Enumeration<File> elements(final File dir);
+	public abstract Iterator<File> elements(final File dir);
 	PathElementEnumerator newEnumerator() {
 		return new PathElementEnumerator(this);
 	}
@@ -92,10 +92,10 @@ class RegularMask extends PathElementMask {
 		return new MatchingElementEnumerator(this);
 	}
 	@Override
-	public Enumeration<File> elements(File dir) {
+	public Iterator<File> elements(File dir) {
 		throw new Error();
 	}
-	public Enumeration<File> elements(File dir, final Matcher matcher) {
+	public Iterator<File> elements(File dir, final Matcher matcher) {
 		if (dir == null) throw new IllegalArgumentException();
 		// System.out.println("PathElementMask.elements("+dir+"{"+dir.getName()+","+dir.getAbsolutePath()+"}, mask=\""+matcher.pattern()+")\"");
 		return new ListEnumerator(dir, new ListEnumerator.Instantiator() {
@@ -121,7 +121,7 @@ class FixedPathElement extends PathElementMask {
 		list = new String[] { dirsOnly ? s + File.separator : s };
 	}
 	@Override
-	public Enumeration<File> elements(File dir) {
+	public Iterator<File> elements(File dir) {
 		// System.out.println("FixedPathElement.elements("+dir+"), mask=\""+name+"\"");
 		if (dir == null) throw new IllegalArgumentException();
 		return new ListEnumerator(dir, list,
@@ -143,7 +143,7 @@ class AnyFile extends PathElementMask {
 		// System.out.println("AnyFile("+dirsOnly+"):");
 	}
 	@Override
-	public Enumeration<File> elements(File dir) {
+	public Iterator<File> elements(File dir) {
 		// System.out.println("AnyFile.elements("+dir+")");
 		if (dir == null) throw new IllegalArgumentException();
 		return new ListEnumerator(dir, new ListEnumerator.Instantiator() {
@@ -172,7 +172,7 @@ class AnyPath extends PathElementMask {
 		// System.out.println("AnyFile("+dirsOnly+"):");
 	}
 	@Override
-	public Enumeration<File> elements(final File dir) {
+	public Iterator<File> elements(final File dir) {
 		// System.out.println("AnyFile.elements("+dir+")");
 		if (dir == null) throw new IllegalArgumentException();
 		final Stack<File> stack = new Stack<>();
@@ -181,14 +181,14 @@ class AnyPath extends PathElementMask {
 			{
 				currObj = dir;
 			}
-			private Enumeration<File> currEn;
+			private Iterator<File> currEn;
 			@Override
 			protected boolean find() {
-				while (currEn == null || !currEn.hasMoreElements()) {
+				while (currEn == null || !currEn.hasNext()) {
 					if (stack.size() == 0) { return false; }
 					currEn = new ListEnumerator(stack.pop(), inst);
 				}
-				currObj = currEn.nextElement();
+				currObj = currEn.next();
 				if (currObj.isDirectory()) stack.push(currObj);
 				return true;
 			}

@@ -37,8 +37,8 @@
 package jregex.util.io;
 
 import java.io.File;
-import java.util.Enumeration;
-import java.util.Vector;
+import java.util.ArrayList;
+import java.util.Iterator;
 
 import jregex.*;
 
@@ -185,18 +185,17 @@ public class PathPattern extends Pattern {
 			last = (last.next = mask);
 		}
 	}
-	public Enumeration<File> enumerateFiles() {
+	public Iterator<File> enumerateFiles() {
 		PathElementEnumerator fe = queue.newEnumerator();
 		fe.setDir(rootf != null ? rootf : new File(root));
 		return fe;
 	}
 	public File[] files() {
-		Enumeration<File> e = enumerateFiles();
-		Vector<File> v = new Vector<>();
-		while (e.hasMoreElements())
-			v.addElement(e.nextElement());
-		File[] files = new File[v.size()];
-		v.copyInto(files);
+		Iterator<File> e = enumerateFiles();
+		ArrayList<File> v = new ArrayList<>();
+		while (e.hasNext())
+			v.add(e.next());
+		File[] files = v.toArray(new File[0]);
 		return files;
 	}
 	/**
