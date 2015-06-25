@@ -1651,7 +1651,6 @@ public final class Pattern implements java.io.Serializable {
 	 * is constructed to match canonical equivalences of the characters.
 	 */
 	private void normalize() {
-		boolean inCharClass = false;
 		int lastCodePoint = -1;
 		// Convert pattern into normalizedD form
 		normalizedPattern = Normalizer
@@ -1804,7 +1803,6 @@ public final class Pattern implements java.io.Serializable {
 		// offset maintains the index in code units.
 		loop: for (int x = 0, offset = 0; x < nCodePoints; x++, offset += len) {
 			len = countChars(input, offset, 1);
-			boolean skip = false;
 			for (int y = x - 1; y >= 0; y--) {
 				if (combClass[y] == combClass[x]) {
 					continue loop;
@@ -1983,6 +1981,7 @@ public final class Pattern implements java.io.Serializable {
 	/**
 	 * Used to print out a subtree of the Pattern to help with debugging.
 	 */
+	@SuppressWarnings("unused")
 	private static void printObjectTree(Node node) {
 		while (node != null) {
 			if (node instanceof Prolog) {
@@ -2080,6 +2079,7 @@ public final class Pattern implements java.io.Serializable {
 	 * Read the next character, and advance the cursor by one,
 	 * ignoring the COMMENTS setting
 	 */
+	@SuppressWarnings("unused")
 	private int readEscaped() {
 		int ch = temp[cursor++];
 		return ch;
@@ -2774,25 +2774,6 @@ public final class Pattern implements java.io.Serializable {
 		}
 	}
 	private CharProperty bitsOrSingle(BitClass bits, int ch) {
-		/*
-		 * Bits can only handle codepoints in [u+0000-u+00ff] range.
-		 * Use "single" node instead of bits when dealing with unicode
-		 * case folding for codepoints listed below.
-		 * (1)Uppercase out of range: u+00ff, u+00b5
-		 * toUpperCase(u+00ff) -> u+0178
-		 * toUpperCase(u+00b5) -> u+039c
-		 * (2)LatinSmallLetterLongS u+17f
-		 * toUpperCase(u+017f) -> u+0053
-		 * (3)LatinSmallLetterDotlessI u+131
-		 * toUpperCase(u+0131) -> u+0049
-		 * (4)LatinCapitalLetterIWithDotAbove u+0130
-		 * toLowerCase(u+0130) -> u+0069
-		 * (5)KelvinSign u+212a
-		 * toLowerCase(u+212a) ==> u+006B
-		 * (6)AngstromSign u+212b
-		 * toLowerCase(u+212b) ==> u+00e5
-		 */
-		int d;
 		if (ch < 256
 				&& !(has(CASE_INSENSITIVE) && has(UNICODE_CASE) && (ch == 0xff
 						|| ch == 0xb5 || ch == 0x49 || ch == 0x69 || // I
@@ -3104,7 +3085,6 @@ public final class Pattern implements java.io.Serializable {
 			// Discover if the group is deterministic
 			TreeInfo info = new TreeInfo();
 			if (head.study(info)) { // Deterministic
-				GroupTail temp = (GroupTail) tail;
 				head = root = new GroupCurly(head.next, curly.cmin,
 						curly.cmax, curly.type,
 						((GroupTail) tail).localIndex,
@@ -3233,7 +3213,6 @@ public final class Pattern implements java.io.Serializable {
 	 * Prev could be a single or a group, so it could be a chain of nodes.
 	 */
 	private Node closure(Node prev) {
-		Node atom;
 		int ch = peek();
 		switch (ch) {
 			case '?':
@@ -3449,6 +3428,7 @@ public final class Pattern implements java.io.Serializable {
 		BitClass() {
 			bits = new boolean[256];
 		}
+		@SuppressWarnings("unused")
 		private BitClass(boolean[] bits) {
 			this.bits = bits;
 		}
@@ -5453,7 +5433,7 @@ public final class Pattern implements java.io.Serializable {
 			// a shift larger than the pattern length cannot
 			// be used anyway.
 			if (patternLength < 4) { return node; }
-			int i, j, k;
+			int i, j;
 			int[] lastOcc = new int[128];
 			int[] optoSft = new int[patternLength];
 			// Precalculate part of the bad character shift
