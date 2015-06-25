@@ -1,7 +1,7 @@
 package openjdk.regex;
 
 public class Range {
-	public static final Range EMPTY = new Range(-1, -1);
+	// TODO Rename
 	public final int start, end;
 	private Range(int start, int end) {
 		super();

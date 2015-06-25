@@ -3517,8 +3517,7 @@ public final class Pattern implements java.io.Serializable {
 		 */
 		boolean match(Matcher matcher, int i, CharSequence seq) {
 			matcher.last = i;
-			matcher.groups[0] = matcher.first;
-			matcher.groups[1] = matcher.last;
+			matcher.groupsr[0].add(Range.of(matcher.first, matcher.last));
 			return true;
 		}
 		/**
@@ -3543,8 +3542,7 @@ public final class Pattern implements java.io.Serializable {
 			if (matcher.acceptMode == Matcher.ENDANCHOR && i != matcher.to)
 				return false;
 			matcher.last = i;
-			matcher.groups[0] = matcher.first;
-			matcher.groups[1] = matcher.last;
+			matcher.groupsr[0].add(Range.of(matcher.first, matcher.last));
 			return true;
 		}
 	}
@@ -3572,8 +3570,8 @@ public final class Pattern implements java.io.Serializable {
 			for (; i <= guard; i++) {
 				if (next.match(matcher, i, seq)) {
 					matcher.first = i;
-					matcher.groups[0] = matcher.first;
-					matcher.groups[1] = matcher.last;
+					matcher.groupsr[0].add(Range.of(matcher.first,
+							matcher.last));
 					return true;
 				}
 			}
@@ -3606,8 +3604,8 @@ public final class Pattern implements java.io.Serializable {
 				// if ((ret = next.match(matcher, i, seq)) || i == guard)
 				if (next.match(matcher, i, seq)) {
 					matcher.first = i;
-					matcher.groups[0] = matcher.first;
-					matcher.groups[1] = matcher.last;
+					matcher.groupsr[0].add(Range.of(matcher.first,
+							matcher.last));
 					return true;
 				}
 				if (i == guard) break;
@@ -3635,8 +3633,7 @@ public final class Pattern implements java.io.Serializable {
 			int fromIndex = (matcher.anchoringBounds) ? matcher.from : 0;
 			if (i == fromIndex && next.match(matcher, i, seq)) {
 				matcher.first = i;
-				matcher.groups[0] = i;
-				matcher.groups[1] = matcher.last;
+				matcher.groupsr[0].add(Range.of(i, matcher.last));
 				return true;
 			} else {
 				return false;
@@ -4469,14 +4466,12 @@ public final class Pattern implements java.io.Serializable {
 		}
 		@Override
 		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int[] groups = matcher.groups;
+			ArrayList<Range>[] groupsr = matcher.groupsr;
 			int[] locals = matcher.locals;
 			int save0 = locals[localIndex];
-			int save1 = 0;
-			int save2 = 0;
+			ArrayList<Range> saver = new ArrayList<Range>();
 			if (capture) {
-				save1 = groups[groupIndex];
-				save2 = groups[groupIndex + 1];
+				saver = new ArrayList<>(groupsr[groupIndex / 2]);
 			}
 			// Notify GroupTail there is no need to setup group info
 			// because it will be set here
@@ -4485,8 +4480,8 @@ public final class Pattern implements java.io.Serializable {
 			for (int j = 0; j < cmin; j++) {
 				if (atom.match(matcher, i, seq)) {
 					if (capture) {
-						groups[groupIndex] = i;
-						groups[groupIndex + 1] = matcher.last;
+						groupsr[groupIndex / 2].add(Range.of(i,
+								matcher.last));
 					}
 					i = matcher.last;
 				} else {
@@ -4506,8 +4501,7 @@ public final class Pattern implements java.io.Serializable {
 			if (!ret) {
 				locals[localIndex] = save0;
 				if (capture) {
-					groups[groupIndex] = save1;
-					groups[groupIndex + 1] = save2;
+					groupsr[groupIndex / 2] = saver;
 				}
 			}
 			return ret;
@@ -4516,12 +4510,10 @@ public final class Pattern implements java.io.Serializable {
 		boolean match0(Matcher matcher, int i, int j, CharSequence seq) {
 			// don't back off passing the starting "j"
 			int min = j;
-			int[] groups = matcher.groups;
-			int save0 = 0;
-			int save1 = 0;
+			ArrayList<Range>[] groupsr = matcher.groupsr;
+			ArrayList<Range> saver = new ArrayList<Range>();
 			if (capture) {
-				save0 = groups[groupIndex];
-				save1 = groups[groupIndex + 1];
+				saver = new ArrayList<>(groupsr[groupIndex / 2]);
 			}
 			for (;;) {
 				if (j >= cmax) break;
@@ -4529,16 +4521,14 @@ public final class Pattern implements java.io.Serializable {
 				int k = matcher.last - i;
 				if (k <= 0) {
 					if (capture) {
-						groups[groupIndex] = i;
-						groups[groupIndex + 1] = i + k;
+						groupsr[groupIndex / 2].add(Range.of(i, i + k));
 					}
 					i = i + k;
 					break;
 				}
 				for (;;) {
 					if (capture) {
-						groups[groupIndex] = i;
-						groups[groupIndex + 1] = i + k;
+						groupsr[groupIndex / 2].add(Range.of(i, i + k));
 					}
 					i = i + k;
 					if (++j >= cmax) break;
@@ -4551,24 +4541,22 @@ public final class Pattern implements java.io.Serializable {
 				while (j > min) {
 					if (next.match(matcher, i, seq)) {
 						if (capture) {
-							groups[groupIndex + 1] = i;
-							groups[groupIndex] = i - k;
+							groupsr[groupIndex / 2].add(Range.of(i - k,
+									i));
 						}
 						return true;
 					}
 					// backing off
 					i = i - k;
 					if (capture) {
-						groups[groupIndex + 1] = i;
-						groups[groupIndex] = i - k;
+						groupsr[groupIndex / 2].add(Range.of(i - k, i));
 					}
 					j--;
 				}
 				break;
 			}
 			if (capture) {
-				groups[groupIndex] = save0;
-				groups[groupIndex + 1] = save1;
+				groupsr[groupIndex / 2] = saver;
 			}
 			return next.match(matcher, i, seq);
 		}
@@ -4580,8 +4568,7 @@ public final class Pattern implements java.io.Serializable {
 				if (!atom.match(matcher, i, seq)) return false;
 				if (i == matcher.last) return false;
 				if (capture) {
-					matcher.groups[groupIndex] = i;
-					matcher.groups[groupIndex + 1] = matcher.last;
+					matcher.groupsr[0].add(Range.of(i, matcher.last));
 				}
 				i = matcher.last;
 				j++;
@@ -4594,8 +4581,7 @@ public final class Pattern implements java.io.Serializable {
 					break;
 				}
 				if (capture) {
-					matcher.groups[groupIndex] = i;
-					matcher.groups[groupIndex + 1] = matcher.last;
+					matcher.groupsr[0].add(Range.of(i, matcher.last));
 				}
 				if (i == matcher.last) {
 					break;
@@ -4780,13 +4766,10 @@ public final class Pattern implements java.io.Serializable {
 			if (tmp >= 0) { // This is the normal group case.
 				// Save the group so we can unset it if it
 				// backs off of a match.
-				int groupStart = matcher.groups[groupIndex];
-				int groupEnd = matcher.groups[groupIndex + 1];
-				matcher.groups[groupIndex] = tmp;
-				matcher.groups[groupIndex + 1] = i;
+				matcher.groupsr[groupIndex / 2].add(Range.of(tmp, i));
 				if (next.match(matcher, i, seq)) { return true; }
-				matcher.groups[groupIndex] = groupStart;
-				matcher.groups[groupIndex + 1] = groupEnd;
+				matcher.groupsr[groupIndex / 2]
+						.remove(matcher.groupsr[groupIndex / 2].size() - 1);;
 				return false;
 			} else {
 				// This is a group reference case. We don't need to save any
@@ -4953,8 +4936,14 @@ public final class Pattern implements java.io.Serializable {
 		}
 		@Override
 		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int j = matcher.groups[groupIndex];
-			int k = matcher.groups[groupIndex + 1];
+			int j, k;
+			try {
+				j = matcher.start(groupIndex / 2);
+				k = matcher.end(groupIndex / 2);
+			} catch (IndexOutOfBoundsException e) {
+				j = k = -1;
+			}
+			// TODO
 			int groupSize = k - j;
 			// If the referenced group didn't match, neither can this
 			if (j < 0) return false;
@@ -4986,8 +4975,8 @@ public final class Pattern implements java.io.Serializable {
 		}
 		@Override
 		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int j = matcher.groups[groupIndex];
-			int k = matcher.groups[groupIndex + 1];
+			int j = matcher.start(groupIndex / 2);
+			int k = matcher.end(groupIndex / 2);
 			int groupSize = k - j;
 			// If the referenced group didn't match, neither can this
 			if (j < 0) return false;
@@ -5499,8 +5488,8 @@ public final class Pattern implements java.io.Serializable {
 				boolean ret = next.match(matcher, i + patternLength, seq);
 				if (ret) {
 					matcher.first = i;
-					matcher.groups[0] = matcher.first;
-					matcher.groups[1] = matcher.last;
+					matcher.groupsr[0].add(Range.of(matcher.first,
+							matcher.last));
 					return true;
 				}
 				i++;
@@ -5556,8 +5545,8 @@ public final class Pattern implements java.io.Serializable {
 				boolean ret = next.match(matcher, i + lengthInChars, seq);
 				if (ret) {
 					matcher.first = i;
-					matcher.groups[0] = matcher.first;
-					matcher.groups[1] = matcher.last;
+					matcher.groupsr[0].add(Range.of(matcher.first,
+							matcher.last));
 					return true;
 				}
 				i += countChars(seq, i, 1);

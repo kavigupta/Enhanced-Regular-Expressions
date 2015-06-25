@@ -24,6 +24,7 @@
  */
 package openjdk.regex;
 
+import java.util.ArrayList;
 import java.util.Objects;
 
 /**
@@ -116,7 +117,7 @@ public final class Matcher implements MatchResult {
 	 * The storage used by groups. They may contain invalid values if
 	 * a group was skipped during the matching.
 	 */
-	int[] groups;
+	ArrayList<Range>[] groupsr;
 	/**
 	 * The range within the sequence that is to be matched. Anchors
 	 * will match at these "hard" boundaries. Changing the region
@@ -202,12 +203,13 @@ public final class Matcher implements MatchResult {
 	/**
 	 * All matchers have the state used by Pattern during a match.
 	 */
+	@SuppressWarnings("unchecked")
 	Matcher(Pattern parent, CharSequence text) {
 		this.parentPattern = parent;
 		this.text = text;
 		// Allocate state storage
 		int parentGroupCount = Math.max(parent.capturingGroupCount, 10);
-		groups = new int[parentGroupCount * 2];
+		groupsr = new ArrayList[parentGroupCount];
 		locals = new int[parent.localCount];
 		// Put fields into initial states
 		reset();
@@ -232,7 +234,7 @@ public final class Matcher implements MatchResult {
 		Matcher result = new Matcher(this.parentPattern, text.toString());
 		result.first = this.first;
 		result.last = this.last;
-		result.groups = this.groups.clone();
+		result.groupsr = this.groupsr.clone();
 		return result;
 	}
 	/**
@@ -257,10 +259,8 @@ public final class Matcher implements MatchResult {
 		parentPattern = newPattern;
 		// Reallocate state storage
 		int parentGroupCount = Math.max(newPattern.capturingGroupCount, 10);
-		groups = new int[parentGroupCount * 2];
 		locals = new int[newPattern.localCount];
-		for (int i = 0; i < groups.length; i++)
-			groups[i] = -1;
+		resetGroups(parentGroupCount);
 		for (int i = 0; i < locals.length; i++)
 			locals[i] = -1;
 		return this;
@@ -279,8 +279,7 @@ public final class Matcher implements MatchResult {
 		first = -1;
 		last = 0;
 		oldLast = -1;
-		for (int i = 0; i < groups.length; i++)
-			groups[i] = -1;
+		resetGroups(groupsr.length);
 		for (int i = 0; i < locals.length; i++)
 			locals[i] = -1;
 		lastAppendPosition = 0;
@@ -312,6 +311,19 @@ public final class Matcher implements MatchResult {
 	 *         If no match has yet been attempted,
 	 *         or if the previous match operation failed
 	 */
+	public Range range(int group) {
+		return range(group, iterations(group) - 1);
+	}
+	public int iterations(int group) {
+		return groupsr[group].size();
+	}
+	public Range range(int group, int iteration) {
+		if (iteration >= groupsr[group].size() || iteration < 0) return null;
+		return groupsr[group].get(iteration);
+	}
+	public Range range(String groupName, int iteration) {
+		return range(getMatchedGroupIndex(groupName), iteration);
+	}
 	@Override
 	public int start() {
 		if (first < 0) throw new IllegalStateException("No match available");
@@ -344,7 +356,7 @@ public final class Matcher implements MatchResult {
 		if (first < 0) throw new IllegalStateException("No match available");
 		if (group < 0 || group > groupCount())
 			throw new IndexOutOfBoundsException("No group " + group);
-		return groups[group * 2];
+		return range(group).start;
 	}
 	/**
 	 * Returns the start index of the subsequence captured by the given
@@ -365,7 +377,7 @@ public final class Matcher implements MatchResult {
 	 * @since 1.8
 	 */
 	public int start(String name) {
-		return groups[getMatchedGroupIndex(name) * 2];
+		return start(getMatchedGroupIndex(name));
 	}
 	/**
 	 * Returns the offset after the last character matched.
@@ -407,7 +419,7 @@ public final class Matcher implements MatchResult {
 		if (first < 0) throw new IllegalStateException("No match available");
 		if (group < 0 || group > groupCount())
 			throw new IndexOutOfBoundsException("No group " + group);
-		return groups[group * 2 + 1];
+		return range(group).end;
 	}
 	/**
 	 * Returns the offset after the last character of the subsequence
@@ -428,7 +440,7 @@ public final class Matcher implements MatchResult {
 	 * @since 1.8
 	 */
 	public int end(String name) {
-		return groups[getMatchedGroupIndex(name) * 2 + 1];
+		return end(getMatchedGroupIndex(name));
 	}
 	/**
 	 * Returns the input subsequence matched by the previous match.
@@ -492,10 +504,9 @@ public final class Matcher implements MatchResult {
 		if (first < 0) throw new IllegalStateException("No match found");
 		if (group < 0 || group > groupCount())
 			throw new IndexOutOfBoundsException("No group " + group);
-		if ((groups[group * 2] == -1) || (groups[group * 2 + 1] == -1))
-			return null;
-		return getSubSequence(groups[group * 2], groups[group * 2 + 1])
-				.toString();
+		Range range = range(group);
+		if (range == null) return null;
+		return getSubSequence(range).toString();
 	}
 	/**
 	 * Returns the input subsequence captured by the given
@@ -525,10 +536,7 @@ public final class Matcher implements MatchResult {
 	 */
 	public String group(String name) {
 		int group = getMatchedGroupIndex(name);
-		if ((groups[group * 2] == -1) || (groups[group * 2 + 1] == -1))
-			return null;
-		return getSubSequence(groups[group * 2], groups[group * 2 + 1])
-				.toString();
+		return group(group);
 	}
 	/**
 	 * Returns the number of capturing groups in this matcher's pattern.
@@ -582,8 +590,7 @@ public final class Matcher implements MatchResult {
 		if (nextSearchIndex < from) nextSearchIndex = from;
 		// If next search starts beyond region then it fails
 		if (nextSearchIndex > to) {
-			for (int i = 0; i < groups.length; i++)
-				groups[i] = -1;
+			resetGroups(groupsr.length);
 			return false;
 		}
 		return search(nextSearchIndex);
@@ -1175,8 +1182,7 @@ public final class Matcher implements MatchResult {
 		from = from < 0 ? 0 : from;
 		this.first = from;
 		this.oldLast = oldLast < 0 ? from : oldLast;
-		for (int i = 0; i < groups.length; i++)
-			groups[i] = -1;
+		resetGroups(groupsr.length);
 		acceptMode = NOANCHOR;
 		boolean result = parentPattern.root.match(this, from, text);
 		if (!result) this.first = -1;
@@ -1195,8 +1201,7 @@ public final class Matcher implements MatchResult {
 		from = from < 0 ? 0 : from;
 		this.first = from;
 		this.oldLast = oldLast < 0 ? from : oldLast;
-		for (int i = 0; i < groups.length; i++)
-			groups[i] = -1;
+		resetGroups(groupsr.length);
 		acceptMode = anchor;
 		boolean result = parentPattern.matchRoot.match(this, from, text);
 		if (!result) this.first = -1;
@@ -1210,6 +1215,9 @@ public final class Matcher implements MatchResult {
 	 */
 	int getTextLength() {
 		return text.length();
+	}
+	CharSequence getSubSequence(Range range) {
+		return getSubSequence(range.start, range.end);
 	}
 	/**
 	 * Generates a String from this Matcher's input in the specified range.
@@ -1241,5 +1249,11 @@ public final class Matcher implements MatchResult {
 			throw new IllegalArgumentException("No group with name <" + name
 					+ ">");
 		return parentPattern.namedGroups().get(name);
+	}
+	@SuppressWarnings("unchecked")
+	private void resetGroups(int parentGroupCount) {
+		groupsr = new ArrayList[parentGroupCount];
+		for (int i = 0; i < groupsr.length; i++)
+			groupsr[i] = new ArrayList<>();
 	}
 }
