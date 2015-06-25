@@ -3517,7 +3517,7 @@ public final class Pattern implements java.io.Serializable {
 		 */
 		boolean match(Matcher matcher, int i, CharSequence seq) {
 			matcher.last = i;
-			matcher.groupsr[0].add(Range.of(matcher.first, matcher.last));
+			matcher.cacheGroup(0, Range.of(matcher.first, matcher.last));
 			return true;
 		}
 		/**
@@ -3542,7 +3542,7 @@ public final class Pattern implements java.io.Serializable {
 			if (matcher.acceptMode == Matcher.ENDANCHOR && i != matcher.to)
 				return false;
 			matcher.last = i;
-			matcher.groupsr[0].add(Range.of(matcher.first, matcher.last));
+			matcher.cacheGroup(0, Range.of(matcher.first, matcher.last));
 			return true;
 		}
 	}
@@ -3570,8 +3570,8 @@ public final class Pattern implements java.io.Serializable {
 			for (; i <= guard; i++) {
 				if (next.match(matcher, i, seq)) {
 					matcher.first = i;
-					matcher.groupsr[0].add(Range.of(matcher.first,
-							matcher.last));
+					matcher.cacheGroup(0,
+							Range.of(matcher.first, matcher.last));
 					return true;
 				}
 			}
@@ -3604,8 +3604,8 @@ public final class Pattern implements java.io.Serializable {
 				// if ((ret = next.match(matcher, i, seq)) || i == guard)
 				if (next.match(matcher, i, seq)) {
 					matcher.first = i;
-					matcher.groupsr[0].add(Range.of(matcher.first,
-							matcher.last));
+					matcher.cacheGroup(0,
+							Range.of(matcher.first, matcher.last));
 					return true;
 				}
 				if (i == guard) break;
@@ -3633,7 +3633,7 @@ public final class Pattern implements java.io.Serializable {
 			int fromIndex = (matcher.anchoringBounds) ? matcher.from : 0;
 			if (i == fromIndex && next.match(matcher, i, seq)) {
 				matcher.first = i;
-				matcher.groupsr[0].add(Range.of(i, matcher.last));
+				matcher.cacheGroup(0, Range.of(i, matcher.last));
 				return true;
 			} else {
 				return false;
@@ -4453,7 +4453,7 @@ public final class Pattern implements java.io.Serializable {
 		int cmax;
 		int localIndex;
 		int groupIndex;
-		boolean capture;
+		private final boolean capture;
 		GroupCurly(Node node, int cmin, int cmax, int type, int local,
 				int group, boolean capture) {
 			this.atom = node;
@@ -4480,8 +4480,8 @@ public final class Pattern implements java.io.Serializable {
 			for (int j = 0; j < cmin; j++) {
 				if (atom.match(matcher, i, seq)) {
 					if (capture) {
-						groupsr[groupIndex / 2].add(Range.of(i,
-								matcher.last));
+						matcher.cacheGroup(groupIndex / 2,
+								Range.of(i, matcher.last));
 					}
 					i = matcher.last;
 				} else {
@@ -4510,25 +4510,22 @@ public final class Pattern implements java.io.Serializable {
 		boolean match0(Matcher matcher, int i, int j, CharSequence seq) {
 			// don't back off passing the starting "j"
 			int min = j;
-			ArrayList<Range>[] groupsr = matcher.groupsr;
-			ArrayList<Range> saver = new ArrayList<Range>();
-			if (capture) {
-				saver = new ArrayList<>(groupsr[groupIndex / 2]);
-			}
 			for (;;) {
 				if (j >= cmax) break;
 				if (!atom.match(matcher, i, seq)) break;
 				int k = matcher.last - i;
 				if (k <= 0) {
 					if (capture) {
-						groupsr[groupIndex / 2].add(Range.of(i, i + k));
+						matcher.cacheGroup(groupIndex / 2,
+								Range.of(i, i + k));
 					}
 					i = i + k;
 					break;
 				}
 				for (;;) {
 					if (capture) {
-						groupsr[groupIndex / 2].add(Range.of(i, i + k));
+						matcher.cacheGroup(groupIndex / 2,
+								Range.of(i, i + k));
 					}
 					i = i + k;
 					if (++j >= cmax) break;
@@ -4541,22 +4538,20 @@ public final class Pattern implements java.io.Serializable {
 				while (j > min) {
 					if (next.match(matcher, i, seq)) {
 						if (capture) {
-							groupsr[groupIndex / 2].add(Range.of(i - k,
-									i));
+							matcher.cacheGroup(groupIndex / 2,
+									Range.of(i - k, i));
 						}
 						return true;
 					}
 					// backing off
 					i = i - k;
 					if (capture) {
-						groupsr[groupIndex / 2].add(Range.of(i - k, i));
+						matcher.cacheGroup(groupIndex / 2,
+								Range.of(i - k, i));
 					}
 					j--;
 				}
 				break;
-			}
-			if (capture) {
-				groupsr[groupIndex / 2] = saver;
 			}
 			return next.match(matcher, i, seq);
 		}
@@ -4568,7 +4563,7 @@ public final class Pattern implements java.io.Serializable {
 				if (!atom.match(matcher, i, seq)) return false;
 				if (i == matcher.last) return false;
 				if (capture) {
-					matcher.groupsr[0].add(Range.of(i, matcher.last));
+					matcher.cacheGroup(0, Range.of(i, matcher.last));
 				}
 				i = matcher.last;
 				j++;
@@ -4581,7 +4576,7 @@ public final class Pattern implements java.io.Serializable {
 					break;
 				}
 				if (capture) {
-					matcher.groupsr[0].add(Range.of(i, matcher.last));
+					matcher.cacheGroup(0, Range.of(i, matcher.last));
 				}
 				if (i == matcher.last) {
 					break;
@@ -4766,7 +4761,7 @@ public final class Pattern implements java.io.Serializable {
 			if (tmp >= 0) { // This is the normal group case.
 				// Save the group so we can unset it if it
 				// backs off of a match.
-				matcher.groupsr[groupIndex / 2].add(Range.of(tmp, i));
+				matcher.cacheGroup(groupIndex / 2, Range.of(tmp, i));
 				if (next.match(matcher, i, seq)) { return true; }
 				matcher.groupsr[groupIndex / 2]
 						.remove(matcher.groupsr[groupIndex / 2].size() - 1);;
@@ -5488,8 +5483,8 @@ public final class Pattern implements java.io.Serializable {
 				boolean ret = next.match(matcher, i + patternLength, seq);
 				if (ret) {
 					matcher.first = i;
-					matcher.groupsr[0].add(Range.of(matcher.first,
-							matcher.last));
+					matcher.cacheGroup(0,
+							Range.of(matcher.first, matcher.last));
 					return true;
 				}
 				i++;
@@ -5545,8 +5540,8 @@ public final class Pattern implements java.io.Serializable {
 				boolean ret = next.match(matcher, i + lengthInChars, seq);
 				if (ret) {
 					matcher.first = i;
-					matcher.groupsr[0].add(Range.of(matcher.first,
-							matcher.last));
+					matcher.cacheGroup(0,
+							Range.of(matcher.first, matcher.last));
 					return true;
 				}
 				i += countChars(seq, i, 1);

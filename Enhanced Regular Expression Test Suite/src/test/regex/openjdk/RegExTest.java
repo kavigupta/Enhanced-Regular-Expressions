@@ -59,7 +59,6 @@ import org.junit.Test;
  */
 public class RegExTest {
 	private static Random generator = new Random();
-	private static boolean failure = false;
 	private static int failCount = 0;
 	/**
 	 * Main to interpret arguments and run several tests.
@@ -71,9 +70,6 @@ public class RegExTest {
 		// processFile("PerlCases.txt");
 		processFile("BMPTestCases.txt");
 		processFile("SupplementaryTestCases.txt");
-		if (failure)
-			throw new RuntimeException("Failure in the RE handling.");
-		else System.err.println("OKAY: All tests passed.");
 	}
 	// Utility functions
 	private static String getRandomAlphaString(int length) {
@@ -128,9 +124,11 @@ public class RegExTest {
 		for (int i = 0; i < spacesToAdd; i++)
 			paddedNameBuffer.append(" ");
 		String paddedName = paddedNameBuffer.toString();
-		System.err.println(paddedName + ": "
-				+ (failCount == 0 ? "Passed" : "Failed(" + failCount + ")"));
-		if (failCount > 0) failure = true;
+		if (failCount > 0)
+			throw new AssertionError(paddedName
+					+ ": "
+					+ (failCount == 0 ? "Passed" : "Failed(" + failCount
+							+ ")"));
 		failCount = 0;
 	}
 	/**

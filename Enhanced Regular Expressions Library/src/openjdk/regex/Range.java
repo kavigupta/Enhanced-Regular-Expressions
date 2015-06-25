@@ -1,6 +1,6 @@
 package openjdk.regex;
 
-public class Range {
+public class Range implements Comparable<Range> {
 	// TODO Rename
 	public final int start, end;
 	private Range(int start, int end) {
@@ -39,5 +39,11 @@ public class Range {
 	}
 	public static Range of(int first, int last) {
 		return new Range(first, last);
+	}
+	@Override
+	public int compareTo(Range o) {
+		int compare = Integer.compare(this.start, o.start);
+		if (compare != 0) return compare;
+		return Integer.compare(this.end, o.end);
 	}
 }

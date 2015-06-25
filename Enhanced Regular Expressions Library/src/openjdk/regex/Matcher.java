@@ -25,7 +25,9 @@
 package openjdk.regex;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Objects;
+import java.util.TreeSet;
 
 /**
  * An engine that performs match operations on a
@@ -118,6 +120,11 @@ public final class Matcher implements MatchResult {
 	 * a group was skipped during the matching.
 	 */
 	ArrayList<Range>[] groupsr;
+	void cacheGroup(int i, Range of) {
+		// if (range(i) != null && of.start < range(i).end)
+		// throw new RuntimeException();
+		groupsr[i].add(of);
+	}
 	/**
 	 * The range within the sequence that is to be matched. Anchors
 	 * will match at these "hard" boundaries. Changing the region
@@ -315,7 +322,11 @@ public final class Matcher implements MatchResult {
 		return range(group, iterations(group) - 1);
 	}
 	public int iterations(int group) {
+		System.out.println(Arrays.toString(groupsr));
 		return groupsr[group].size();
+	}
+	public int iterations(String group) {
+		return iterations(getMatchedGroupIndex(group));
 	}
 	public Range range(int group, int iteration) {
 		if (iteration >= groupsr[group].size() || iteration < 0) return null;
@@ -506,7 +517,7 @@ public final class Matcher implements MatchResult {
 			throw new IndexOutOfBoundsException("No group " + group);
 		Range range = range(group);
 		if (range == null) return null;
-		return getSubSequence(range).toString();
+		return getRange(range).toString();
 	}
 	/**
 	 * Returns the input subsequence captured by the given
@@ -1187,6 +1198,7 @@ public final class Matcher implements MatchResult {
 		boolean result = parentPattern.root.match(this, from, text);
 		if (!result) this.first = -1;
 		this.oldLast = this.last;
+		sortGroups();
 		return result;
 	}
 	/**
@@ -1216,7 +1228,7 @@ public final class Matcher implements MatchResult {
 	int getTextLength() {
 		return text.length();
 	}
-	CharSequence getSubSequence(Range range) {
+	public CharSequence getRange(Range range) {
 		return getSubSequence(range.start, range.end);
 	}
 	/**
@@ -1255,5 +1267,12 @@ public final class Matcher implements MatchResult {
 		groupsr = new ArrayList[parentGroupCount];
 		for (int i = 0; i < groupsr.length; i++)
 			groupsr[i] = new ArrayList<>();
+	}
+	private void sortGroups() {
+		ArrayList<Range> zero = new ArrayList<>();
+		zero.add(range(0));
+		groupsr[0] = zero;
+		for (int i = 1; i < groupsr.length; i++)
+			groupsr[i] = new ArrayList<>(new TreeSet<>(groupsr[i]));
 	}
 }
