@@ -29,7 +29,6 @@
 
 package jregex;
 
-import java.io.*;
 
 public interface TextBuffer{
    public void append(char c);

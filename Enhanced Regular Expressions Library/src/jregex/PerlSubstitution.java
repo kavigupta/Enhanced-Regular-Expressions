@@ -29,9 +29,6 @@
 
 package jregex;
 
-import java.io.*;
-import java.util.Hashtable;
-import java.util.Vector;
 
 /**
  * An implementation of the Substitution interface. Performs substitutions in accordance with Perl-like substitution scripts.<br>

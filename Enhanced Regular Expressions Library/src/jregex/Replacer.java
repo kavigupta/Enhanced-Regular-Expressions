@@ -29,8 +29,9 @@
 
 package jregex;
 
-import java.io.*;
-import java.util.Hashtable;
+import java.io.IOException;
+import java.io.Reader;
+import java.io.Writer;
 
 /**
  * <b>The Replacer class</b> suggests some methods to replace occurences of a pattern 
