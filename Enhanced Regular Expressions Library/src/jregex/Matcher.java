@@ -170,6 +170,22 @@ public class Matcher implements MatchResult {
 	 * 
 	 * 
 	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
 	 * </pre>
 	 * 
 	 * Resets current search position to zero.
@@ -352,6 +368,7 @@ public class Matcher implements MatchResult {
 		String src = cache;
 		if (src != null) {
 			int co = cacheOffset;
+			System.out.println(cache);
 			return src.substring(start - co, end - co);
 		}
 		int tOffset = this.offset, tLen = this.end - tOffset;
@@ -745,7 +762,10 @@ public class Matcher implements MatchResult {
    */
 	@Override
 	public int groupCount() {
-		return memregs.length;
+		return memregs.length - 1;
+	}
+	public String group() {
+		return group(0);
 	}
 	/**
    */
@@ -841,6 +861,7 @@ public class Matcher implements MatchResult {
 		// System.out.println("Matcher.bounds("+id+"):");
 		MemReg mr;
 		if (id >= 0) {
+			System.out.println(groupCount() + "\t" + memregs.length);
 			mr = memregs[id];
 		} else switch (id) {
 			case PREFIX:

@@ -35,16 +35,15 @@ package test.regex.openjdk;
  *      6358731 6178785 6284152 6231989 6497148 6486934 6233084 6504326 6635133
  *      6350801 6676425 6878475 6919132 6931676 6948903 7014645 7039066
  */
+import static org.junit.Assert.assertTrue;
+
 import java.io.*;
-import java.nio.CharBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
-import java.util.regex.MatchResult;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
+
+import jregex.*;
 
 import org.junit.Test;
 
@@ -69,13 +68,10 @@ public class RegExTest {
 		processFile("SupplementaryTestCases.txt");
 		// These test many randomly generated char patterns
 		bm();
-		slice();
 		// These are hard to put into the file
 		escapes();
 		blankInput();
 		// Substitition tests on randomly generated sequences
-		globalSubstitute();
-		stringbufferSubstitute();
 		substitutionBasher();
 	}
 	// Utility functions
@@ -99,12 +95,12 @@ public class RegExTest {
 		if (p.matcher(s).find() != expected) failCount++;
 	}
 	private static void check(String p, String s, boolean expected) {
-		Matcher matcher = Pattern.compile(p).matcher(s);
+		Matcher matcher = new Pattern(p).matcher(s);
 		if (matcher.find() != expected) failCount++;
 	}
 	private static void check(String p, char c, boolean expected) {
 		String propertyPattern = expected ? "\\p" + p : "\\P" + p;
-		Pattern pattern = Pattern.compile(propertyPattern);
+		Pattern pattern = new Pattern(propertyPattern);
 		char[] ca = new char[1];
 		ca[0] = c;
 		Matcher matcher = pattern.matcher(new String(ca));
@@ -112,14 +108,14 @@ public class RegExTest {
 	}
 	private static void check(String p, int codePoint, boolean expected) {
 		String propertyPattern = expected ? "\\p" + p : "\\P" + p;
-		Pattern pattern = Pattern.compile(propertyPattern);
+		Pattern pattern = new Pattern(propertyPattern);
 		char[] ca = Character.toChars(codePoint);
 		Matcher matcher = pattern.matcher(new String(ca));
 		if (!matcher.find()) failCount++;
 	}
 	private static void check(String p, int flag, String input, String s,
 			boolean expected) {
-		Pattern pattern = Pattern.compile(p, flag);
+		Pattern pattern = new Pattern(p, flag);
 		Matcher matcher = pattern.matcher(input);
 		if (expected)
 			check(matcher, s, expected);
@@ -184,7 +180,7 @@ public class RegExTest {
 		check(new Runnable() {
 			@Override
 			public void run() {
-				Pattern.compile(null);
+				new Pattern(null);
 			}
 		});
 		check(new Runnable() {
@@ -202,59 +198,11 @@ public class RegExTest {
 		check(new Runnable() {
 			@Override
 			public void run() {
-				Pattern.quote(null);
+				new Pattern("xyz").matcher(null);
 			}
 		});
-		check(new Runnable() {
-			@Override
-			public void run() {
-				Pattern.compile("xyz").split(null);
-			}
-		});
-		check(new Runnable() {
-			@Override
-			public void run() {
-				Pattern.compile("xyz").matcher(null);
-			}
-		});
-		final Matcher m = Pattern.compile("xyz").matcher("xyz");
+		final Matcher m = new Pattern("xyz").matcher("xyz");
 		m.matches();
-		check(new Runnable() {
-			@Override
-			public void run() {
-				m.appendTail(null);
-			}
-		});
-		check(new Runnable() {
-			@Override
-			public void run() {
-				m.replaceAll(null);
-			}
-		});
-		check(new Runnable() {
-			@Override
-			public void run() {
-				m.replaceFirst(null);
-			}
-		});
-		check(new Runnable() {
-			@Override
-			public void run() {
-				m.appendReplacement(null, null);
-			}
-		});
-		check(new Runnable() {
-			@Override
-			public void run() {
-				m.reset(null);
-			}
-		});
-		check(new Runnable() {
-			@Override
-			public void run() {
-				Matcher.quoteReplacement(null);
-			}
-		});
 		// check(new Runnable() { public void run() { m.usePattern(null);}});
 		report("Null Argument");
 	}
@@ -262,7 +210,7 @@ public class RegExTest {
 	// Test if surrogate pair in Unicode escapes can be handled correctly.
 	@Test
 	public void surrogatesInClassTest() throws Exception {
-		Pattern pattern = Pattern.compile("[\\ud834\\udd21-\\ud834\\udd24]");
+		Pattern pattern = new Pattern("[\\ud834\\udd21-\\ud834\\udd24]");
 		Matcher matcher = pattern.matcher("\ud834\udd22");
 		if (!matcher.find()) failCount++;
 	}
@@ -271,12 +219,12 @@ public class RegExTest {
 	// that is not affected by subsequent operations on the original
 	@Test
 	public void toMatchResultTest() throws Exception {
-		Pattern pattern = Pattern.compile("squid");
+		Pattern pattern = new Pattern("squid");
 		Matcher matcher = pattern
 				.matcher("agiantsquidofdestinyasmallsquidoffate");
 		matcher.find();
 		int matcherStart1 = matcher.start();
-		MatchResult mr = matcher.toMatchResult();
+		MatchResult mr = matcher;
 		if (mr == matcher) failCount++;
 		int resultStart1 = mr.start();
 		if (matcherStart1 != resultStart1) failCount++;
@@ -285,53 +233,17 @@ public class RegExTest {
 		int resultStart2 = mr.start();
 		if (matcherStart2 == resultStart2) failCount++;
 		if (resultStart1 != resultStart2) failCount++;
-		MatchResult mr2 = matcher.toMatchResult();
+		MatchResult mr2 = matcher;
 		if (mr == mr2) failCount++;
 		if (mr2.start() != matcherStart2) failCount++;
 		report("toMatchResult is a copy");
-	}
-	// This is for bug 5013885
-	// Must test a slice to see if it reports hitEnd correctly
-	@Test
-	public void hitEndTest() throws Exception {
-		// Basic test of Slice node
-		Pattern p = Pattern.compile("^squidattack");
-		Matcher m = p.matcher("squack");
-		m.find();
-		if (m.hitEnd()) failCount++;
-		m.reset("squid");
-		m.find();
-		if (!m.hitEnd()) failCount++;
-		// Test Slice, SliceA and SliceU nodes
-		for (int i = 0; i < 3; i++) {
-			int flags = 0;
-			if (i == 1) flags = Pattern.CASE_INSENSITIVE;
-			if (i == 2) flags = Pattern.UNICODE_CASE;
-			p = Pattern.compile("^abc", flags);
-			m = p.matcher("ad");
-			m.find();
-			if (m.hitEnd()) failCount++;
-			m.reset("ab");
-			m.find();
-			if (!m.hitEnd()) failCount++;
-		}
-		// Test Boyer-Moore node
-		p = Pattern.compile("catattack");
-		m = p.matcher("attack");
-		m.find();
-		if (!m.hitEnd()) failCount++;
-		p = Pattern.compile("catattack");
-		m = p.matcher("attackattackattackcatatta");
-		m.find();
-		if (!m.hitEnd()) failCount++;
-		report("hitEnd from a Slice");
 	}
 	// This is for bug 4997476
 	// It is weird code submitted by customer demonstrating a regression
 	@Test
 	public void wordSearchTest() throws Exception {
 		String testString = new String("word1 word2 word3");
-		Pattern p = Pattern.compile("\\b");
+		Pattern p = new Pattern("\\b");
 		Matcher m = p.matcher(testString);
 		int position = 0;
 		int start = 0;
@@ -355,7 +267,7 @@ public class RegExTest {
 		// Problem only occurs with multiline patterns
 		// containing a beginning-of-line caret "^" followed
 		// by an expression that also matches the empty string.
-		Pattern pattern = Pattern.compile("^x?", Pattern.MULTILINE);
+		Pattern pattern = new Pattern("^x?", Pattern.MULTILINE);
 		Matcher matcher = pattern.matcher("\r");
 		matcher.find();
 		matcher.find();
@@ -370,7 +282,7 @@ public class RegExTest {
 		String wordChar = "a";
 		String nsm = "\u030a";
 		assert (Character.getType('\u030a') == Character.NON_SPACING_MARK);
-		Pattern pattern = Pattern.compile("\\b");
+		Pattern pattern = new Pattern("\\b");
 		Matcher matcher = pattern.matcher("");
 		// S=other B=word character N=non spacing mark .=word boundary
 		// SS.BB.SS
@@ -393,7 +305,7 @@ public class RegExTest {
 		twoFindIndexes(input, matcher, 2, 5);
 		// SSNNSS
 		input = spaces + nsm + nsm + spaces;
-		matcher.reset(input);
+		matcher.setTarget(input);
 		if (matcher.find()) failCount++;
 		// SSN.BBN.SS
 		input = spaces + nsm + wordChar + wordChar + nsm + spaces;
@@ -402,7 +314,7 @@ public class RegExTest {
 	}
 	private static void twoFindIndexes(String input, Matcher matcher, int a,
 			int b) throws Exception {
-		matcher.reset(input);
+		matcher.setTarget(input);
 		matcher.find();
 		if (matcher.start() != a) failCount++;
 		matcher.find();
@@ -411,7 +323,7 @@ public class RegExTest {
 	// This test is for 6284152
 	static void check(String regex, String input, String[] expected) {
 		List<String> result = new ArrayList<String>();
-		Pattern p = Pattern.compile(regex);
+		Pattern p = new Pattern(regex);
 		Matcher m = p.matcher(input);
 		while (m.find()) {
 			result.add(m.group());
@@ -450,54 +362,11 @@ public class RegExTest {
 				new String[] { "fo\ud800\udc00o" });
 		report("Lookbehind");
 	}
-	// This test is for 4938995
-	// Check to see if weak region boundaries are transparent to
-	// lookahead and lookbehind constructs
-	@Test
-	public void boundsTest() throws Exception {
-		String fullMessage = "catdogcat";
-		Pattern pattern = Pattern.compile("(?<=cat)dog(?=cat)");
-		Matcher matcher = pattern.matcher("catdogca");
-		matcher.useTransparentBounds(true);
-		if (matcher.find()) failCount++;
-		matcher.reset("atdogcat");
-		if (matcher.find()) failCount++;
-		matcher.reset(fullMessage);
-		if (!matcher.find()) failCount++;
-		matcher.reset(fullMessage);
-		matcher.region(0, 9);
-		if (!matcher.find()) failCount++;
-		matcher.reset(fullMessage);
-		matcher.region(0, 6);
-		if (!matcher.find()) failCount++;
-		matcher.reset(fullMessage);
-		matcher.region(3, 6);
-		if (!matcher.find()) failCount++;
-		matcher.useTransparentBounds(false);
-		if (matcher.find()) failCount++;
-		// Negative lookahead/lookbehind
-		pattern = Pattern.compile("(?<!cat)dog(?!cat)");
-		matcher = pattern.matcher("dogcat");
-		matcher.useTransparentBounds(true);
-		matcher.region(0, 3);
-		if (matcher.find()) failCount++;
-		matcher.reset("catdog");
-		matcher.region(3, 6);
-		if (matcher.find()) failCount++;
-		matcher.useTransparentBounds(false);
-		matcher.reset("dogcat");
-		matcher.region(0, 3);
-		if (!matcher.find()) failCount++;
-		matcher.reset("catdog");
-		matcher.region(3, 6);
-		if (!matcher.find()) failCount++;
-		report("Region bounds transparency");
-	}
 	// This test is for 4945394
 	@Test
 	public void findFromTest() throws Exception {
 		String message = "This is 40 $0 message.";
-		Pattern pat = Pattern.compile("\\$0");
+		Pattern pat = new Pattern("\\$0");
 		Matcher match = pat.matcher(message);
 		if (!match.find()) failCount++;
 		if (match.find()) failCount++;
@@ -507,13 +376,13 @@ public class RegExTest {
 	// This test is for 4872664 and 4892980
 	@Test
 	public void negatedCharClassTest() throws Exception {
-		Pattern pattern = Pattern.compile("[^>]");
+		Pattern pattern = new Pattern("[^>]");
 		Matcher matcher = pattern.matcher("\u203A");
 		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile("[^fr]");
+		pattern = new Pattern("[^fr]");
 		matcher = pattern.matcher("a");
 		if (!matcher.find()) failCount++;
-		matcher.reset("\u203A");
+		matcher.setTarget("\u203A");
 		if (!matcher.find()) failCount++;
 		String s = "for";
 		String result[] = s.split("[^fr]");
@@ -524,262 +393,59 @@ public class RegExTest {
 		if (!result[0].equals("f")) failCount++;
 		if (!result[1].equals("r")) failCount++;
 		// Test adding to bits, subtracting a node, then adding to bits again
-		pattern = Pattern.compile("[^f\u203Ar]");
+		pattern = new Pattern("[^f\u203Ar]");
 		matcher = pattern.matcher("a");
 		if (!matcher.find()) failCount++;
-		matcher.reset("f");
+		matcher.setTarget("f");
 		if (matcher.find()) failCount++;
-		matcher.reset("\u203A");
+		matcher.setTarget("\u203A");
 		if (matcher.find()) failCount++;
-		matcher.reset("r");
+		matcher.setTarget("r");
 		if (matcher.find()) failCount++;
-		matcher.reset("\u203B");
+		matcher.setTarget("\u203B");
 		if (!matcher.find()) failCount++;
 		// Test subtracting a node, adding to bits, subtracting again
-		pattern = Pattern.compile("[^\u203Ar\u203B]");
+		pattern = new Pattern("[^\u203Ar\u203B]");
 		matcher = pattern.matcher("a");
 		if (!matcher.find()) failCount++;
-		matcher.reset("\u203A");
+		matcher.setTarget("\u203A");
 		if (matcher.find()) failCount++;
-		matcher.reset("r");
+		matcher.setTarget("r");
 		if (matcher.find()) failCount++;
-		matcher.reset("\u203B");
+		matcher.setTarget("\u203B");
 		if (matcher.find()) failCount++;
-		matcher.reset("\u203C");
+		matcher.setTarget("\u203C");
 		if (!matcher.find()) failCount++;
 		report("Negated Character Class");
 	}
 	// This test is for 4628291
 	@Test
 	public void toStringTest() throws Exception {
-		Pattern pattern = Pattern.compile("b+");
+		Pattern pattern = new Pattern("b+");
 		if (pattern.toString() != "b+") failCount++;
 		Matcher matcher = pattern.matcher("aaabbbccc");
 		matcher.toString();
 		matcher.find();
 		matcher.toString();
-		matcher.region(0, 3);
-		matcher.toString();
-		matcher.reset();
+		matcher.setTarget("");
 		matcher.toString();
 		report("toString");
-	}
-	// This test is for 4808962
-	@Test
-	public void literalPatternTest() throws Exception {
-		int flags = Pattern.LITERAL;
-		Pattern pattern = Pattern.compile("abc\\t$^", flags);
-		check(pattern, "abc\\t$^", true);
-		pattern = Pattern.compile(Pattern.quote("abc\\t$^"));
-		check(pattern, "abc\\t$^", true);
-		pattern = Pattern.compile("\\Qa^$bcabc\\E", flags);
-		check(pattern, "\\Qa^$bcabc\\E", true);
-		check(pattern, "a^$bcabc", false);
-		pattern = Pattern.compile("\\\\Q\\\\E");
-		check(pattern, "\\Q\\E", true);
-		pattern = Pattern.compile("\\Qabc\\Eefg\\\\Q\\\\Ehij");
-		check(pattern, "abcefg\\Q\\Ehij", true);
-		pattern = Pattern.compile("\\\\\\Q\\\\E");
-		check(pattern, "\\\\\\\\", true);
-		pattern = Pattern.compile(Pattern.quote("\\Qa^$bcabc\\E"));
-		check(pattern, "\\Qa^$bcabc\\E", true);
-		check(pattern, "a^$bcabc", false);
-		pattern = Pattern.compile(Pattern.quote("\\Qabc\\Edef"));
-		check(pattern, "\\Qabc\\Edef", true);
-		check(pattern, "abcdef", false);
-		pattern = Pattern.compile(Pattern.quote("abc\\Edef"));
-		check(pattern, "abc\\Edef", true);
-		check(pattern, "abcdef", false);
-		pattern = Pattern.compile(Pattern.quote("\\E"));
-		check(pattern, "\\E", true);
-		pattern = Pattern.compile("((((abc.+?:)", flags);
-		check(pattern, "((((abc.+?:)", true);
-		flags |= Pattern.MULTILINE;
-		pattern = Pattern.compile("^cat$", flags);
-		check(pattern, "abc^cat$def", true);
-		check(pattern, "cat", false);
-		flags |= Pattern.CASE_INSENSITIVE;
-		pattern = Pattern.compile("abcdef", flags);
-		check(pattern, "ABCDEF", true);
-		check(pattern, "AbCdEf", true);
-		flags |= Pattern.DOTALL;
-		pattern = Pattern.compile("a...b", flags);
-		check(pattern, "A...b", true);
-		check(pattern, "Axxxb", false);
-		flags |= Pattern.CANON_EQ;
-		Pattern.compile("testa\u030a", flags);
-		check(pattern, "testa\u030a", false);
-		check(pattern, "test\u00e5", false);
-		// Supplementary character test
-		flags = Pattern.LITERAL;
-		pattern = Pattern.compile(toSupplementaries("abc\\t$^"), flags);
-		check(pattern, toSupplementaries("abc\\t$^"), true);
-		pattern = Pattern.compile(Pattern
-				.quote(toSupplementaries("abc\\t$^")));
-		check(pattern, toSupplementaries("abc\\t$^"), true);
-		pattern = Pattern.compile(toSupplementaries("\\Qa^$bcabc\\E"), flags);
-		check(pattern, toSupplementaries("\\Qa^$bcabc\\E"), true);
-		check(pattern, toSupplementaries("a^$bcabc"), false);
-		pattern = Pattern.compile(Pattern
-				.quote(toSupplementaries("\\Qa^$bcabc\\E")));
-		check(pattern, toSupplementaries("\\Qa^$bcabc\\E"), true);
-		check(pattern, toSupplementaries("a^$bcabc"), false);
-		pattern = Pattern.compile(Pattern
-				.quote(toSupplementaries("\\Qabc\\Edef")));
-		check(pattern, toSupplementaries("\\Qabc\\Edef"), true);
-		check(pattern, toSupplementaries("abcdef"), false);
-		pattern = Pattern.compile(Pattern
-				.quote(toSupplementaries("abc\\Edef")));
-		check(pattern, toSupplementaries("abc\\Edef"), true);
-		check(pattern, toSupplementaries("abcdef"), false);
-		pattern = Pattern.compile(toSupplementaries("((((abc.+?:)"), flags);
-		check(pattern, toSupplementaries("((((abc.+?:)"), true);
-		flags |= Pattern.MULTILINE;
-		pattern = Pattern.compile(toSupplementaries("^cat$"), flags);
-		check(pattern, toSupplementaries("abc^cat$def"), true);
-		check(pattern, toSupplementaries("cat"), false);
-		flags |= Pattern.DOTALL;
-		// note: this is case-sensitive.
-		pattern = Pattern.compile(toSupplementaries("a...b"), flags);
-		check(pattern, toSupplementaries("a...b"), true);
-		check(pattern, toSupplementaries("axxxb"), false);
-		flags |= Pattern.CANON_EQ;
-		String t = toSupplementaries("test");
-		Pattern.compile(t + "a\u030a", flags);
-		check(pattern, t + "a\u030a", false);
-		check(pattern, t + "\u00e5", false);
-		report("Literal pattern");
-	}
-	// This test is for 4803179
-	// This test is also for 4808962, replacement parts
-	@Test
-	public void literalReplacementTest() throws Exception {
-		int flags = Pattern.LITERAL;
-		Pattern pattern = Pattern.compile("abc", flags);
-		Matcher matcher = pattern.matcher("zzzabczzz");
-		String replaceTest = "$0";
-		String result = matcher.replaceAll(replaceTest);
-		if (!result.equals("zzzabczzz")) failCount++;
-		matcher.reset();
-		String literalReplacement = Matcher.quoteReplacement(replaceTest);
-		result = matcher.replaceAll(literalReplacement);
-		if (!result.equals("zzz$0zzz")) failCount++;
-		matcher.reset();
-		replaceTest = "\\t$\\$";
-		literalReplacement = Matcher.quoteReplacement(replaceTest);
-		result = matcher.replaceAll(literalReplacement);
-		if (!result.equals("zzz\\t$\\$zzz")) failCount++;
-		// Supplementary character test
-		pattern = Pattern.compile(toSupplementaries("abc"), flags);
-		matcher = pattern.matcher(toSupplementaries("zzzabczzz"));
-		replaceTest = "$0";
-		result = matcher.replaceAll(replaceTest);
-		if (!result.equals(toSupplementaries("zzzabczzz"))) failCount++;
-		matcher.reset();
-		literalReplacement = Matcher.quoteReplacement(replaceTest);
-		result = matcher.replaceAll(literalReplacement);
-		if (!result.equals(toSupplementaries("zzz$0zzz"))) failCount++;
-		matcher.reset();
-		replaceTest = "\\t$\\$";
-		literalReplacement = Matcher.quoteReplacement(replaceTest);
-		result = matcher.replaceAll(literalReplacement);
-		if (!result.equals(toSupplementaries("zzz\\t$\\$zzz"))) failCount++;
-		report("Literal replacement");
-	}
-	// This test is for 4757029
-	@Test
-	public void regionTest() throws Exception {
-		Pattern pattern = Pattern.compile("abc");
-		Matcher matcher = pattern.matcher("abcdefabc");
-		matcher.region(0, 9);
-		if (!matcher.find()) failCount++;
-		if (!matcher.find()) failCount++;
-		matcher.region(0, 3);
-		if (!matcher.find()) failCount++;
-		matcher.region(3, 6);
-		if (matcher.find()) failCount++;
-		matcher.region(0, 2);
-		if (matcher.find()) failCount++;
-		expectRegionFail(matcher, 1, -1);
-		expectRegionFail(matcher, -1, -1);
-		expectRegionFail(matcher, -1, 1);
-		expectRegionFail(matcher, 5, 3);
-		expectRegionFail(matcher, 5, 12);
-		expectRegionFail(matcher, 12, 12);
-		pattern = Pattern.compile("^abc$");
-		matcher = pattern.matcher("zzzabczzz");
-		matcher.region(0, 9);
-		if (matcher.find()) failCount++;
-		matcher.region(3, 6);
-		if (!matcher.find()) failCount++;
-		matcher.region(3, 6);
-		matcher.useAnchoringBounds(false);
-		if (matcher.find()) failCount++;
-		// Supplementary character test
-		pattern = Pattern.compile(toSupplementaries("abc"));
-		matcher = pattern.matcher(toSupplementaries("abcdefabc"));
-		matcher.region(0, 9 * 2);
-		if (!matcher.find()) failCount++;
-		if (!matcher.find()) failCount++;
-		matcher.region(0, 3 * 2);
-		if (!matcher.find()) failCount++;
-		matcher.region(1, 3 * 2);
-		if (matcher.find()) failCount++;
-		matcher.region(3 * 2, 6 * 2);
-		if (matcher.find()) failCount++;
-		matcher.region(0, 2 * 2);
-		if (matcher.find()) failCount++;
-		matcher.region(0, 2 * 2 + 1);
-		if (matcher.find()) failCount++;
-		expectRegionFail(matcher, 1 * 2, -1);
-		expectRegionFail(matcher, -1, -1);
-		expectRegionFail(matcher, -1, 1 * 2);
-		expectRegionFail(matcher, 5 * 2, 3 * 2);
-		expectRegionFail(matcher, 5 * 2, 12 * 2);
-		expectRegionFail(matcher, 12 * 2, 12 * 2);
-		pattern = Pattern.compile(toSupplementaries("^abc$"));
-		matcher = pattern.matcher(toSupplementaries("zzzabczzz"));
-		matcher.region(0, 9 * 2);
-		if (matcher.find()) failCount++;
-		matcher.region(3 * 2, 6 * 2);
-		if (!matcher.find()) failCount++;
-		matcher.region(3 * 2 + 1, 6 * 2);
-		if (matcher.find()) failCount++;
-		matcher.region(3 * 2, 6 * 2 - 1);
-		if (matcher.find()) failCount++;
-		matcher.region(3 * 2, 6 * 2);
-		matcher.useAnchoringBounds(false);
-		if (matcher.find()) failCount++;
-		report("Regions");
-	}
-	private static void expectRegionFail(Matcher matcher, int index1,
-			int index2) {
-		try {
-			matcher.region(index1, index2);
-			failCount++;
-		} catch (IndexOutOfBoundsException ioobe) {
-			// Correct result
-		} catch (IllegalStateException ise) {
-			// Correct result
-		}
 	}
 	// This test is for 4803197
 	@Test
 	public void escapedSegmentTest() throws Exception {
-		Pattern pattern = Pattern.compile("\\Qdir1\\dir2\\E");
+		Pattern pattern = new Pattern("\\Qdir1\\dir2\\E");
 		check(pattern, "dir1\\dir2", true);
-		pattern = Pattern.compile("\\Qdir1\\dir2\\\\E");
+		pattern = new Pattern("\\Qdir1\\dir2\\\\E");
 		check(pattern, "dir1\\dir2\\", true);
-		pattern = Pattern.compile("(\\Qdir1\\dir2\\\\E)");
+		pattern = new Pattern("(\\Qdir1\\dir2\\\\E)");
 		check(pattern, "dir1\\dir2\\", true);
 		// Supplementary character test
-		pattern = Pattern.compile(toSupplementaries("\\Qdir1\\dir2\\E"));
+		pattern = new Pattern(toSupplementaries("\\Qdir1\\dir2\\E"));
 		check(pattern, toSupplementaries("dir1\\dir2"), true);
-		pattern = Pattern.compile(toSupplementaries("\\Qdir1\\dir2")
-				+ "\\\\E");
+		pattern = new Pattern(toSupplementaries("\\Qdir1\\dir2") + "\\\\E");
 		check(pattern, toSupplementaries("dir1\\dir2\\"), true);
-		pattern = Pattern.compile(toSupplementaries("(\\Qdir1\\dir2")
-				+ "\\\\E)");
+		pattern = new Pattern(toSupplementaries("(\\Qdir1\\dir2") + "\\\\E)");
 		check(pattern, toSupplementaries("dir1\\dir2\\"), true);
 		report("Escaped segment");
 	}
@@ -800,7 +466,7 @@ public class RegExTest {
 			// Check find()
 			check(patterns[i], 0, input, input, true);
 			// Check matches()
-			Pattern p = Pattern.compile(patterns[i]);
+			Pattern p = new Pattern(patterns[i]);
 			Matcher m = p.matcher(input);
 			if (m.matches()) {
 				if (!m.group(0).equals(input)) failCount++;
@@ -813,7 +479,7 @@ public class RegExTest {
 	// This test is for 6358731
 	@Test
 	public void notCapturedGroupCurlyMatchTest() throws Exception {
-		Pattern pattern = Pattern.compile("(abc)+|(abcd)+");
+		Pattern pattern = new Pattern("(abc)+|(abcd)+");
 		Matcher matcher = pattern.matcher("abcd");
 		if (!matcher.matches() || matcher.group(1) != null
 				|| !matcher.group(2).equals("abcd")) {
@@ -882,14 +548,14 @@ public class RegExTest {
 	// This test is for 4523620
 	/*
 	 * @Test public void numOccurrencesTest() throws Exception {
-	 * Pattern pattern = Pattern.compile("aaa");
+	 * Pattern pattern = new Pattern("aaa");
 	 * 
 	 * if (pattern.numOccurrences("aaaaaa", false) != 2)
 	 * failCount++;
 	 * if (pattern.numOccurrences("aaaaaa", true) != 4)
 	 * failCount++;
 	 * 
-	 * pattern = Pattern.compile("^");
+	 * pattern = new Pattern("^");
 	 * if (pattern.numOccurrences("aaaaaa", false) != 1)
 	 * failCount++;
 	 * if (pattern.numOccurrences("aaaaaa", true) != 1)
@@ -898,97 +564,9 @@ public class RegExTest {
 	 * report("Number of Occurrences");
 	 * }
 	 */
-	// This test is for 4776374
-	@Test
-	public void caretBetweenTerminatorsTest() throws Exception {
-		int flags1 = Pattern.DOTALL;
-		int flags2 = Pattern.DOTALL | Pattern.UNIX_LINES;
-		int flags3 = Pattern.DOTALL | Pattern.UNIX_LINES | Pattern.MULTILINE;
-		int flags4 = Pattern.DOTALL | Pattern.MULTILINE;
-		check("^....", flags1, "test\ntest", "test", true);
-		check(".....^", flags1, "test\ntest", "test", false);
-		check(".....^", flags1, "test\n", "test", false);
-		check("....^", flags1, "test\r\n", "test", false);
-		check("^....", flags2, "test\ntest", "test", true);
-		check("....^", flags2, "test\ntest", "test", false);
-		check(".....^", flags2, "test\n", "test", false);
-		check("....^", flags2, "test\r\n", "test", false);
-		check("^....", flags3, "test\ntest", "test", true);
-		check(".....^", flags3, "test\ntest", "test\n", true);
-		check(".....^", flags3, "test\u0085test", "test\u0085", false);
-		check(".....^", flags3, "test\n", "test", false);
-		check(".....^", flags3, "test\r\n", "test", false);
-		check("......^", flags3, "test\r\ntest", "test\r\n", true);
-		check("^....", flags4, "test\ntest", "test", true);
-		check(".....^", flags3, "test\ntest", "test\n", true);
-		check(".....^", flags4, "test\u0085test", "test\u0085", true);
-		check(".....^", flags4, "test\n", "test\n", false);
-		check(".....^", flags4, "test\r\n", "test\r", false);
-		// Supplementary character test
-		String t = toSupplementaries("test");
-		check("^....", flags1, t + "\n" + t, t, true);
-		check(".....^", flags1, t + "\n" + t, t, false);
-		check(".....^", flags1, t + "\n", t, false);
-		check("....^", flags1, t + "\r\n", t, false);
-		check("^....", flags2, t + "\n" + t, t, true);
-		check("....^", flags2, t + "\n" + t, t, false);
-		check(".....^", flags2, t + "\n", t, false);
-		check("....^", flags2, t + "\r\n", t, false);
-		check("^....", flags3, t + "\n" + t, t, true);
-		check(".....^", flags3, t + "\n" + t, t + "\n", true);
-		check(".....^", flags3, t + "\u0085" + t, t + "\u0085", false);
-		check(".....^", flags3, t + "\n", t, false);
-		check(".....^", flags3, t + "\r\n", t, false);
-		check("......^", flags3, t + "\r\n" + t, t + "\r\n", true);
-		check("^....", flags4, t + "\n" + t, t, true);
-		check(".....^", flags3, t + "\n" + t, t + "\n", true);
-		check(".....^", flags4, t + "\u0085" + t, t + "\u0085", true);
-		check(".....^", flags4, t + "\n", t + "\n", false);
-		check(".....^", flags4, t + "\r\n", t + "\r", false);
-		report("Caret between terminators");
-	}
-	// This test is for 4727935
-	@Test
-	public void dollarAtEndTest() throws Exception {
-		int flags1 = Pattern.DOTALL;
-		int flags2 = Pattern.DOTALL | Pattern.UNIX_LINES;
-		int flags3 = Pattern.DOTALL | Pattern.MULTILINE;
-		check("....$", flags1, "test\n", "test", true);
-		check("....$", flags1, "test\r\n", "test", true);
-		check(".....$", flags1, "test\n", "test\n", true);
-		check(".....$", flags1, "test\u0085", "test\u0085", true);
-		check("....$", flags1, "test\u0085", "test", true);
-		check("....$", flags2, "test\n", "test", true);
-		check(".....$", flags2, "test\n", "test\n", true);
-		check(".....$", flags2, "test\u0085", "test\u0085", true);
-		check("....$", flags2, "test\u0085", "est\u0085", true);
-		check("....$.blah", flags3, "test\nblah", "test\nblah", true);
-		check(".....$.blah", flags3, "test\n\nblah", "test\n\nblah", true);
-		check("....$blah", flags3, "test\nblah", "!!!!", false);
-		check(".....$blah", flags3, "test\nblah", "!!!!", false);
-		// Supplementary character test
-		String t = toSupplementaries("test");
-		String b = toSupplementaries("blah");
-		check("....$", flags1, t + "\n", t, true);
-		check("....$", flags1, t + "\r\n", t, true);
-		check(".....$", flags1, t + "\n", t + "\n", true);
-		check(".....$", flags1, t + "\u0085", t + "\u0085", true);
-		check("....$", flags1, t + "\u0085", t, true);
-		check("....$", flags2, t + "\n", t, true);
-		check(".....$", flags2, t + "\n", t + "\n", true);
-		check(".....$", flags2, t + "\u0085", t + "\u0085", true);
-		check("....$", flags2, t + "\u0085", toSupplementaries("est\u0085"),
-				true);
-		check("....$." + b, flags3, t + "\n" + b, t + "\n" + b, true);
-		check(".....$." + b, flags3, t + "\n\n" + b, t + "\n\n" + b, true);
-		check("....$" + b, flags3, t + "\n" + b, "!!!!", false);
-		check(".....$" + b, flags3, t + "\n" + b, "!!!!", false);
-		report("Dollar at End");
-	}
-	// This test is for 4711773
 	@Test
 	public void multilineDollarTest() throws Exception {
-		Pattern findCR = Pattern.compile("$", Pattern.MULTILINE);
+		Pattern findCR = new Pattern("$", Pattern.MULTILINE);
 		Matcher matcher = findCR.matcher("first bit\nsecond bit");
 		matcher.find();
 		if (matcher.start(0) != 9) failCount++;
@@ -1007,7 +585,7 @@ public class RegExTest {
 	}
 	@Test
 	public void reluctantRepetitionTest() throws Exception {
-		Pattern p = Pattern.compile("1(\\s\\S+?){1,3}?[\\s,]2");
+		Pattern p = new Pattern("1(\\s\\S+?){1,3}?[\\s,]2");
 		check(p, "1 word word word 2", true);
 		check(p, "1 wor wo w 2", true);
 		check(p, "1 word word 2", true);
@@ -1015,11 +593,11 @@ public class RegExTest {
 		check(p, "1 wo w w 2", true);
 		check(p, "1 wo w 2", true);
 		check(p, "1 wor w 2", true);
-		p = Pattern.compile("([a-z])+?c");
+		p = new Pattern("([a-z])+?c");
 		Matcher m = p.matcher("ababcdefdec");
 		check(m, "ababc");
 		// Supplementary character test
-		p = Pattern.compile(toSupplementaries("([a-z])+?c"));
+		p = new Pattern(toSupplementaries("([a-z])+?c"));
 		m = p.matcher(toSupplementaries("ababcdefdec"));
 		check(m, toSupplementaries("ababc"));
 		report("Reluctant Repetition");
@@ -1028,7 +606,7 @@ public class RegExTest {
 	public void serializeTest() throws Exception {
 		String patternStr = "(b)";
 		String matchStr = "b";
-		Pattern pattern = Pattern.compile(patternStr);
+		Pattern pattern = new Pattern(patternStr);
 		ByteArrayOutputStream baos = new ByteArrayOutputStream();
 		ObjectOutputStream oos = new ObjectOutputStream(baos);
 		oos.writeObject(pattern);
@@ -1044,17 +622,17 @@ public class RegExTest {
 	}
 	@Test
 	public void gTest() {
-		Pattern pattern = Pattern.compile("\\G\\w");
+		Pattern pattern = new Pattern("\\G\\w");
 		Matcher matcher = pattern.matcher("abc#x#x");
 		matcher.find();
 		matcher.find();
 		matcher.find();
 		if (matcher.find()) failCount++;
-		pattern = Pattern.compile("\\GA*");
+		pattern = new Pattern("\\GA*");
 		matcher = pattern.matcher("1A2AA3");
 		matcher.find();
 		if (matcher.find()) failCount++;
-		pattern = Pattern.compile("\\GA*");
+		pattern = new Pattern("\\GA*");
 		matcher = pattern.matcher("1A2AA3");
 		if (!matcher.find(1)) failCount++;
 		matcher.find();
@@ -1063,7 +641,7 @@ public class RegExTest {
 	}
 	@Test
 	public void zTest() {
-		Pattern pattern = Pattern.compile("foo\\Z");
+		Pattern pattern = new Pattern("foo\\Z");
 		// Positives
 		check(pattern, "foo\u0085", true);
 		check(pattern, "foo\u2028", true);
@@ -1074,394 +652,108 @@ public class RegExTest {
 		// Negatives
 		check(pattern, "fooo", false);
 		check(pattern, "foo\n\r", false);
-		pattern = Pattern.compile("foo\\Z", Pattern.UNIX_LINES);
-		// Positives
-		check(pattern, "foo", true);
-		check(pattern, "foo\n", true);
-		// Negatives
-		check(pattern, "foo\r", false);
-		check(pattern, "foo\u0085", false);
-		check(pattern, "foo\u2028", false);
-		check(pattern, "foo\u2029", false);
-		report("\\Z");
 	}
 	@Test
 	public void replaceFirstTest() {
-		Pattern pattern = Pattern.compile("(ab)(c*)");
-		Matcher matcher = pattern.matcher("abccczzzabcczzzabccc");
-		if (!matcher.replaceFirst("test").equals("testzzzabcczzzabccc"))
+		Pattern pattern = new Pattern("(ab)(c*)");
+		Replacer matcher = pattern.replacer("abccczzzabcczzzabccc");
+		if (!matcher.replace("test").equals("testzzzabcczzzabccc"))
 			failCount++;
-		matcher.reset("zzzabccczzzabcczzzabccczzz");
-		if (!matcher.replaceFirst("test").equals("zzztestzzzabcczzzabccczzz"))
+		matcher = pattern.replacer("zzzabccczzzabcczzzabccczzz");
+		if (!matcher.replace("test").equals("zzztestzzzabcczzzabccczzz"))
 			failCount++;
-		matcher.reset("zzzabccczzzabcczzzabccczzz");
-		String result = matcher.replaceFirst("$1");
+		matcher = pattern.replacer("zzzabccczzzabcczzzabccczzz");
+		String result = matcher.replace("$1");
 		if (!result.equals("zzzabzzzabcczzzabccczzz")) failCount++;
-		matcher.reset("zzzabccczzzabcczzzabccczzz");
-		result = matcher.replaceFirst("$2");
+		matcher = pattern.replacer("zzzabccczzzabcczzzabccczzz");
+		result = matcher.replace("$2");
 		if (!result.equals("zzzccczzzabcczzzabccczzz")) failCount++;
-		pattern = Pattern.compile("a*");
-		matcher = pattern.matcher("aaaaaaaaaa");
-		if (!matcher.replaceFirst("test").equals("test")) failCount++;
-		pattern = Pattern.compile("a+");
-		matcher = pattern.matcher("zzzaaaaaaaaaa");
-		if (!matcher.replaceFirst("test").equals("zzztest")) failCount++;
+		pattern = new Pattern("a*");
+		matcher = pattern.replacer("aaaaaaaaaa");
+		if (!matcher.replace("test").equals("test")) failCount++;
+		pattern = new Pattern("a+");
+		matcher = pattern.replacer("zzzaaaaaaaaaa");
+		if (!matcher.replace("test").equals("zzztest")) failCount++;
 		// Supplementary character test
-		pattern = Pattern.compile(toSupplementaries("(ab)(c*)"));
-		matcher = pattern.matcher(toSupplementaries("abccczzzabcczzzabccc"));
-		if (!matcher.replaceFirst(toSupplementaries("test")).equals(
+		pattern = new Pattern(toSupplementaries("(ab)(c*)"));
+		matcher = pattern.replacer(toSupplementaries("abccczzzabcczzzabccc"));
+		if (!matcher.replace(toSupplementaries("test")).equals(
 				toSupplementaries("testzzzabcczzzabccc"))) failCount++;
-		matcher.reset(toSupplementaries("zzzabccczzzabcczzzabccczzz"));
-		if (!matcher.replaceFirst(toSupplementaries("test")).equals(
+		matcher = pattern
+				.replacer(toSupplementaries("zzzabccczzzabcczzzabccczzz"));
+		if (!matcher.replace(toSupplementaries("test")).equals(
 				toSupplementaries("zzztestzzzabcczzzabccczzz")))
 			failCount++;
-		matcher.reset(toSupplementaries("zzzabccczzzabcczzzabccczzz"));
-		result = matcher.replaceFirst("$1");
+		matcher = pattern
+				.replacer(toSupplementaries("zzzabccczzzabcczzzabccczzz"));
+		result = matcher.replace("$1");
 		if (!result.equals(toSupplementaries("zzzabzzzabcczzzabccczzz")))
 			failCount++;
-		matcher.reset(toSupplementaries("zzzabccczzzabcczzzabccczzz"));
-		result = matcher.replaceFirst("$2");
+		matcher = pattern
+				.replacer(toSupplementaries("zzzabccczzzabcczzzabccczzz"));
+		result = matcher.replace("$2");
 		if (!result.equals(toSupplementaries("zzzccczzzabcczzzabccczzz")))
 			failCount++;
-		pattern = Pattern.compile(toSupplementaries("a*"));
-		matcher = pattern.matcher(toSupplementaries("aaaaaaaaaa"));
-		if (!matcher.replaceFirst(toSupplementaries("test")).equals(
+		pattern = new Pattern(toSupplementaries("a*"));
+		matcher = pattern.replacer(toSupplementaries("aaaaaaaaaa"));
+		if (!matcher.replace(toSupplementaries("test")).equals(
 				toSupplementaries("test"))) failCount++;
-		pattern = Pattern.compile(toSupplementaries("a+"));
-		matcher = pattern.matcher(toSupplementaries("zzzaaaaaaaaaa"));
-		if (!matcher.replaceFirst(toSupplementaries("test")).equals(
+		pattern = new Pattern(toSupplementaries("a+"));
+		matcher = pattern.replacer(toSupplementaries("zzzaaaaaaaaaa"));
+		if (!matcher.replace(toSupplementaries("test")).equals(
 				toSupplementaries("zzztest"))) failCount++;
 		report("Replace First");
 	}
 	@Test
-	public void unixLinesTest() {
-		Pattern pattern = Pattern.compile(".*");
-		Matcher matcher = pattern.matcher("aa\u2028blah");
-		matcher.find();
-		if (!matcher.group(0).equals("aa")) failCount++;
-		pattern = Pattern.compile(".*", Pattern.UNIX_LINES);
-		matcher = pattern.matcher("aa\u2028blah");
-		matcher.find();
-		if (!matcher.group(0).equals("aa\u2028blah")) failCount++;
-		pattern = Pattern.compile("[az]$", Pattern.MULTILINE
-				| Pattern.UNIX_LINES);
-		matcher = pattern.matcher("aa\u2028zz");
-		check(matcher, "a\u2028", false);
-		// Supplementary character test
-		pattern = Pattern.compile(".*");
-		matcher = pattern.matcher(toSupplementaries("aa\u2028blah"));
-		matcher.find();
-		if (!matcher.group(0).equals(toSupplementaries("aa"))) failCount++;
-		pattern = Pattern.compile(".*", Pattern.UNIX_LINES);
-		matcher = pattern.matcher(toSupplementaries("aa\u2028blah"));
-		matcher.find();
-		if (!matcher.group(0).equals(toSupplementaries("aa\u2028blah")))
-			failCount++;
-		pattern = Pattern.compile(toSupplementaries("[az]$"),
-				Pattern.MULTILINE | Pattern.UNIX_LINES);
-		matcher = pattern.matcher(toSupplementaries("aa\u2028zz"));
-		check(matcher, toSupplementaries("a\u2028"), false);
-		report("Unix Lines");
-	}
-	@Test
-	public void commentsTest() {
-		int flags = Pattern.COMMENTS;
-		Pattern pattern = Pattern.compile("aa \\# aa", flags);
-		Matcher matcher = pattern.matcher("aa#aa");
-		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile("aa  # blah", flags);
-		matcher = pattern.matcher("aa");
-		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile("aa blah", flags);
-		matcher = pattern.matcher("aablah");
-		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile("aa  # blah blech  ", flags);
-		matcher = pattern.matcher("aa");
-		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile("aa  # blah\n  ", flags);
-		matcher = pattern.matcher("aa");
-		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile("aa  # blah\nbc # blech", flags);
-		matcher = pattern.matcher("aabc");
-		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile("aa  # blah\nbc# blech", flags);
-		matcher = pattern.matcher("aabc");
-		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile("aa  # blah\nbc\\# blech", flags);
-		matcher = pattern.matcher("aabc#blech");
-		if (!matcher.matches()) failCount++;
-		// Supplementary character test
-		pattern = Pattern.compile(toSupplementaries("aa \\# aa"), flags);
-		matcher = pattern.matcher(toSupplementaries("aa#aa"));
-		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile(toSupplementaries("aa  # blah"), flags);
-		matcher = pattern.matcher(toSupplementaries("aa"));
-		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile(toSupplementaries("aa blah"), flags);
-		matcher = pattern.matcher(toSupplementaries("aablah"));
-		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile(toSupplementaries("aa  # blah blech  "),
-				flags);
-		matcher = pattern.matcher(toSupplementaries("aa"));
-		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile(toSupplementaries("aa  # blah\n  "), flags);
-		matcher = pattern.matcher(toSupplementaries("aa"));
-		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile(
-				toSupplementaries("aa  # blah\nbc # blech"), flags);
-		matcher = pattern.matcher(toSupplementaries("aabc"));
-		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile(toSupplementaries("aa  # blah\nbc# blech"),
-				flags);
-		matcher = pattern.matcher(toSupplementaries("aabc"));
-		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile(
-				toSupplementaries("aa  # blah\nbc\\# blech"), flags);
-		matcher = pattern.matcher(toSupplementaries("aabc#blech"));
-		if (!matcher.matches()) failCount++;
-		report("Comments");
-	}
-	@Test
-	public void caseFoldingTest() { // bug 4504687
-		int flags = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
-		Pattern pattern = Pattern.compile("aa", flags);
-		Matcher matcher = pattern.matcher("ab");
-		if (matcher.matches()) failCount++;
-		pattern = Pattern.compile("aA", flags);
-		matcher = pattern.matcher("ab");
-		if (matcher.matches()) failCount++;
-		pattern = Pattern.compile("aa", flags);
-		matcher = pattern.matcher("aB");
-		if (matcher.matches()) failCount++;
-		matcher = pattern.matcher("Ab");
-		if (matcher.matches()) failCount++;
-		// ASCII "a"
-		// Latin-1 Supplement "a" + grave
-		// Cyrillic "a"
-		String[] patterns = new String[] {
-				// single
-				"a", "\u00e0", "\u0430",
-				// slice
-				"ab", "\u00e0\u00e1", "\u0430\u0431",
-				// class single
-				"[a]", "[\u00e0]", "[\u0430]",
-				// class range
-				"[a-b]", "[\u00e0-\u00e5]", "[\u0430-\u0431]",
-				// back reference
-				"(a)\\1", "(\u00e0)\\1", "(\u0430)\\1" };
-		String[] texts = new String[] { "A", "\u00c0", "\u0410", "AB",
-				"\u00c0\u00c1", "\u0410\u0411", "A", "\u00c0", "\u0410",
-				"B", "\u00c2", "\u0411", "aA", "\u00e0\u00c0",
-				"\u0430\u0410" };
-		boolean[] expected = new boolean[] { true, false, false, true, false,
-				false, true, false, false, true, false, false, true, false,
-				false };
-		flags = Pattern.CASE_INSENSITIVE;
-		for (int i = 0; i < patterns.length; i++) {
-			pattern = Pattern.compile(patterns[i], flags);
-			matcher = pattern.matcher(texts[i]);
-			if (matcher.matches() != expected[i]) {
-				System.out.println("<1> Failed at " + i);
-				failCount++;
-			}
-		}
-		flags = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
-		for (int i = 0; i < patterns.length; i++) {
-			pattern = Pattern.compile(patterns[i], flags);
-			matcher = pattern.matcher(texts[i]);
-			if (!matcher.matches()) {
-				System.out.println("<2> Failed at " + i);
-				failCount++;
-			}
-		}
-		// flag unicode_case alone should do nothing
-		flags = Pattern.UNICODE_CASE;
-		for (int i = 0; i < patterns.length; i++) {
-			pattern = Pattern.compile(patterns[i], flags);
-			matcher = pattern.matcher(texts[i]);
-			if (matcher.matches()) {
-				System.out.println("<3> Failed at " + i);
-				failCount++;
-			}
-		}
-		// Special cases: i, I, u+0131 and u+0130
-		flags = Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE;
-		pattern = Pattern.compile("[h-j]+", flags);
-		if (!pattern.matcher("\u0131\u0130").matches()) failCount++;
-		report("Case Folding");
-	}
-	@Test
-	public void appendTest() {
-		Pattern pattern = Pattern.compile("(ab)(cd)");
-		Matcher matcher = pattern.matcher("abcd");
-		String result = matcher.replaceAll("$2$1");
-		if (!result.equals("cdab")) failCount++;
-		String s1 = "Swap all: first = 123, second = 456";
-		String s2 = "Swap one: first = 123, second = 456";
-		String r = "$3$2$1";
-		pattern = Pattern.compile("([a-z]+)( *= *)([0-9]+)");
-		matcher = pattern.matcher(s1);
-		result = matcher.replaceAll(r);
-		if (!result.equals("Swap all: 123 = first, 456 = second"))
-			failCount++;
-		matcher = pattern.matcher(s2);
-		if (matcher.find()) {
-			StringBuffer sb = new StringBuffer();
-			matcher.appendReplacement(sb, r);
-			matcher.appendTail(sb);
-			result = sb.toString();
-			if (!result.equals("Swap one: 123 = first, second = 456"))
-				failCount++;
-		}
-		// Supplementary character test
-		pattern = Pattern.compile(toSupplementaries("(ab)(cd)"));
-		matcher = pattern.matcher(toSupplementaries("abcd"));
-		result = matcher.replaceAll("$2$1");
-		if (!result.equals(toSupplementaries("cdab"))) failCount++;
-		s1 = toSupplementaries("Swap all: first = 123, second = 456");
-		s2 = toSupplementaries("Swap one: first = 123, second = 456");
-		r = toSupplementaries("$3$2$1");
-		pattern = Pattern
-				.compile(toSupplementaries("([a-z]+)( *= *)([0-9]+)"));
-		matcher = pattern.matcher(s1);
-		result = matcher.replaceAll(r);
-		if (!result
-				.equals(toSupplementaries("Swap all: 123 = first, 456 = second")))
-			failCount++;
-		matcher = pattern.matcher(s2);
-		if (matcher.find()) {
-			StringBuffer sb = new StringBuffer();
-			matcher.appendReplacement(sb, r);
-			matcher.appendTail(sb);
-			result = sb.toString();
-			if (!result
-					.equals(toSupplementaries("Swap one: 123 = first, second = 456")))
-				failCount++;
-		}
-		report("Append");
-	}
-	@Test
-	public void splitTest() {
-		Pattern pattern = Pattern.compile(":");
-		String[] result = pattern.split("foo:and:boo", 2);
-		if (!result[0].equals("foo")) failCount++;
-		if (!result[1].equals("and:boo")) failCount++;
-		// Supplementary character test
-		Pattern patternX = Pattern.compile(toSupplementaries("X"));
-		result = patternX.split(toSupplementaries("fooXandXboo"), 2);
-		if (!result[0].equals(toSupplementaries("foo"))) failCount++;
-		if (!result[1].equals(toSupplementaries("andXboo"))) failCount++;
-		CharBuffer cb = CharBuffer.allocate(100);
-		cb.put("foo:and:boo");
-		cb.flip();
-		result = pattern.split(cb);
-		if (!result[0].equals("foo")) failCount++;
-		if (!result[1].equals("and")) failCount++;
-		if (!result[2].equals("boo")) failCount++;
-		// Supplementary character test
-		CharBuffer cbs = CharBuffer.allocate(100);
-		cbs.put(toSupplementaries("fooXandXboo"));
-		cbs.flip();
-		result = patternX.split(cbs);
-		if (!result[0].equals(toSupplementaries("foo"))) failCount++;
-		if (!result[1].equals(toSupplementaries("and"))) failCount++;
-		if (!result[2].equals(toSupplementaries("boo"))) failCount++;
-		String source = "0123456789";
-		for (int limit = -2; limit < 3; limit++) {
-			for (int x = 0; x < 10; x++) {
-				result = source.split(Integer.toString(x), limit);
-				int expectedLength = limit < 1 ? 2 : limit;
-				if ((limit == 0) && (x == 9)) {
-					// expected dropping of ""
-					if (result.length != 1) failCount++;
-					if (!result[0].equals("012345678")) {
-						failCount++;
-					}
-				} else {
-					if (result.length != expectedLength) {
-						failCount++;
-					}
-					if (!result[0].equals(source.substring(0, x))) {
-						if (limit != 1) {
-							failCount++;
-						} else {
-							if (!result[0].equals(source
-									.substring(0, 10))) {
-								failCount++;
-							}
-						}
-					}
-					if (expectedLength > 1) { // Check segment 2
-						if (!result[1]
-								.equals(source.substring(x + 1, 10)))
-							failCount++;
-					}
-				}
-			}
-		}
-		// Check the case for no match found
-		for (int limit = -2; limit < 3; limit++) {
-			result = source.split("e", limit);
-			if (result.length != 1) failCount++;
-			if (!result[0].equals(source)) failCount++;
-		}
-		// Check the case for limit == 0, source = "";
-		source = "";
-		result = source.split("e", 0);
-		if (result.length != 1) failCount++;
-		if (!result[0].equals(source)) failCount++;
-		report("Split");
-	}
-	@Test
 	public void negationTest() {
-		Pattern pattern = Pattern.compile("[\\[@^]+");
+		Pattern pattern = new Pattern("[\\[@^]+");
 		Matcher matcher = pattern.matcher("@@@@[[[[^^^^");
 		if (!matcher.find()) failCount++;
 		if (!matcher.group(0).equals("@@@@[[[[^^^^")) failCount++;
-		pattern = Pattern.compile("[@\\[^]+");
+		pattern = new Pattern("[@\\[^]+");
 		matcher = pattern.matcher("@@@@[[[[^^^^");
 		if (!matcher.find()) failCount++;
 		if (!matcher.group(0).equals("@@@@[[[[^^^^")) failCount++;
-		pattern = Pattern.compile("[@\\[^@]+");
+		pattern = new Pattern("[@\\[^@]+");
 		matcher = pattern.matcher("@@@@[[[[^^^^");
 		if (!matcher.find()) failCount++;
 		if (!matcher.group(0).equals("@@@@[[[[^^^^")) failCount++;
-		pattern = Pattern.compile("\\)");
+		pattern = new Pattern("\\)");
 		matcher = pattern.matcher("xxx)xxx");
 		if (!matcher.find()) failCount++;
 		report("Negation");
 	}
 	@Test
 	public void ampersandTest() {
-		Pattern pattern = Pattern.compile("[&@]+");
+		Pattern pattern = new Pattern("[&@]+");
 		check(pattern, "@@@@&&&&", true);
-		pattern = Pattern.compile("[@&]+");
+		pattern = new Pattern("[@&]+");
 		check(pattern, "@@@@&&&&", true);
-		pattern = Pattern.compile("[@\\&]+");
+		pattern = new Pattern("[@\\&]+");
 		check(pattern, "@@@@&&&&", true);
 		report("Ampersand");
 	}
 	@Test
 	public void octalTest() throws Exception {
-		Pattern pattern = Pattern.compile("\\u0007");
+		Pattern pattern = new Pattern("\\u0007");
 		Matcher matcher = pattern.matcher("\u0007");
 		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile("\\07");
+		pattern = new Pattern("\\07");
 		matcher = pattern.matcher("\u0007");
 		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile("\\007");
+		pattern = new Pattern("\\007");
 		matcher = pattern.matcher("\u0007");
 		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile("\\0007");
+		pattern = new Pattern("\\0007");
 		matcher = pattern.matcher("\u0007");
 		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile("\\040");
+		pattern = new Pattern("\\040");
 		matcher = pattern.matcher("\u0020");
 		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile("\\0403");
+		pattern = new Pattern("\\0403");
 		matcher = pattern.matcher("\u00203");
 		if (!matcher.matches()) failCount++;
-		pattern = Pattern.compile("\\0103");
+		pattern = new Pattern("\\0103");
 		matcher = pattern.matcher("\u0043");
 		if (!matcher.matches()) failCount++;
 		report("Octal");
@@ -1469,27 +761,30 @@ public class RegExTest {
 	@Test
 	public void longPatternTest() throws Exception {
 		try {
-			Pattern.compile("a 32-character-long pattern xxxx");
-			Pattern.compile("a 33-character-long pattern xxxxx");
-			Pattern.compile("a thirty four character long regex");
+			new Pattern("a 32-character-long pattern xxxx");
+			new Pattern("a 33-character-long pattern xxxxx");
+			new Pattern("a thirty four character long regex");
 			StringBuffer patternToBe = new StringBuffer(101);
 			for (int i = 0; i < 100; i++)
 				patternToBe.append((char) (97 + i % 26));
-			Pattern.compile(patternToBe.toString());
+			new Pattern(patternToBe.toString());
 		} catch (PatternSyntaxException e) {
 			failCount++;
 		}
 		// Supplementary character test
 		try {
-			Pattern.compile(toSupplementaries("a 32-character-long pattern xxxx"));
-			Pattern.compile(toSupplementaries("a 33-character-long pattern xxxxx"));
-			Pattern.compile(toSupplementaries("a thirty four character long regex"));
+			new Pattern(
+					toSupplementaries("a 32-character-long pattern xxxx"));
+			new Pattern(
+					toSupplementaries("a 33-character-long pattern xxxxx"));
+			new Pattern(
+					toSupplementaries("a thirty four character long regex"));
 			StringBuffer patternToBe = new StringBuffer(101 * 2);
 			for (int i = 0; i < 100; i++)
 				patternToBe.append(Character
 						.toChars(Character.MIN_SUPPLEMENTARY_CODE_POINT
 								+ 97 + i % 26));
-			Pattern.compile(patternToBe.toString());
+			new Pattern(patternToBe.toString());
 		} catch (PatternSyntaxException e) {
 			failCount++;
 		}
@@ -1497,29 +792,29 @@ public class RegExTest {
 	}
 	@Test
 	public void group0Test() throws Exception {
-		Pattern pattern = Pattern.compile("(tes)ting");
+		Pattern pattern = new Pattern("(tes)ting");
 		Matcher matcher = pattern.matcher("testing");
 		check(matcher, "testing");
-		matcher.reset("testing");
-		if (matcher.lookingAt()) {
+		matcher.setTarget("testing");
+		if (matcher.find()) {
 			if (!matcher.group(0).equals("testing")) failCount++;
 		} else {
 			failCount++;
 		}
-		matcher.reset("testing");
+		matcher.setTarget("testing");
 		if (matcher.matches()) {
 			if (!matcher.group(0).equals("testing")) failCount++;
 		} else {
 			failCount++;
 		}
-		pattern = Pattern.compile("(tes)ting");
+		pattern = new Pattern("(tes)ting");
 		matcher = pattern.matcher("testing");
-		if (matcher.lookingAt()) {
+		if (matcher.find()) {
 			if (!matcher.group(0).equals("testing")) failCount++;
 		} else {
 			failCount++;
 		}
-		pattern = Pattern.compile("^(tes)ting");
+		pattern = new Pattern("^(tes)ting");
 		matcher = pattern.matcher("testing");
 		if (matcher.matches()) {
 			if (!matcher.group(0).equals("testing")) failCount++;
@@ -1527,32 +822,32 @@ public class RegExTest {
 			failCount++;
 		}
 		// Supplementary character test
-		pattern = Pattern.compile(toSupplementaries("(tes)ting"));
+		pattern = new Pattern(toSupplementaries("(tes)ting"));
 		matcher = pattern.matcher(toSupplementaries("testing"));
 		check(matcher, toSupplementaries("testing"));
-		matcher.reset(toSupplementaries("testing"));
-		if (matcher.lookingAt()) {
+		matcher.setTarget(toSupplementaries("testing"));
+		if (matcher.find()) {
 			if (!matcher.group(0).equals(toSupplementaries("testing")))
 				failCount++;
 		} else {
 			failCount++;
 		}
-		matcher.reset(toSupplementaries("testing"));
+		matcher.setTarget(toSupplementaries("testing"));
 		if (matcher.matches()) {
 			if (!matcher.group(0).equals(toSupplementaries("testing")))
 				failCount++;
 		} else {
 			failCount++;
 		}
-		pattern = Pattern.compile(toSupplementaries("(tes)ting"));
+		pattern = new Pattern(toSupplementaries("(tes)ting"));
 		matcher = pattern.matcher(toSupplementaries("testing"));
-		if (matcher.lookingAt()) {
+		if (matcher.find()) {
 			if (!matcher.group(0).equals(toSupplementaries("testing")))
 				failCount++;
 		} else {
 			failCount++;
 		}
-		pattern = Pattern.compile(toSupplementaries("^(tes)ting"));
+		pattern = new Pattern(toSupplementaries("^(tes)ting"));
 		matcher = pattern.matcher(toSupplementaries("testing"));
 		if (matcher.matches()) {
 			if (!matcher.group(0).equals(toSupplementaries("testing")))
@@ -1564,11 +859,11 @@ public class RegExTest {
 	}
 	@Test
 	public void findIntTest() throws Exception {
-		Pattern p = Pattern.compile("blah");
+		Pattern p = new Pattern("blah");
 		Matcher m = p.matcher("zzzzblahzzzzzblah");
 		boolean result = m.find(2);
 		if (!result) failCount++;
-		p = Pattern.compile("$");
+		p = new Pattern("$");
 		m = p.matcher("1234567890");
 		result = m.find(10);
 		if (!result) failCount++;
@@ -1579,7 +874,7 @@ public class RegExTest {
 			// correct result
 		}
 		// Supplementary character test
-		p = Pattern.compile(toSupplementaries("blah"));
+		p = new Pattern(toSupplementaries("blah"));
 		m = p.matcher(toSupplementaries("zzzzblahzzzzzblah"));
 		result = m.find(2);
 		if (!result) failCount++;
@@ -1587,14 +882,14 @@ public class RegExTest {
 	}
 	@Test
 	public void emptyPatternTest() throws Exception {
-		Pattern p = Pattern.compile("");
+		Pattern p = new Pattern("");
 		Matcher m = p.matcher("foo");
 		// Should find empty pattern at beginning of input
 		boolean result = m.find();
 		if (result != true) failCount++;
 		if (m.start() != 0) failCount++;
 		// Should not match entire input if input is not empty
-		m.reset();
+		m.setTarget("");
 		result = m.matches();
 		if (result == true) failCount++;
 		try {
@@ -1604,7 +899,7 @@ public class RegExTest {
 			// Correct result
 		}
 		// Should match entire input if input is empty
-		m.reset("");
+		m.setTarget("");
 		result = m.matches();
 		if (result != true) failCount++;
 		result = Pattern.matches("", "");
@@ -1615,46 +910,19 @@ public class RegExTest {
 	}
 	@Test
 	public void charClassTest() throws Exception {
-		Pattern pattern = Pattern.compile("blah[ab]]blech");
+		Pattern pattern = new Pattern("blah[ab]]blech");
 		check(pattern, "blahb]blech", true);
-		pattern = Pattern.compile("[abc[def]]");
+		pattern = new Pattern("[abc[def]]");
 		check(pattern, "b", true);
 		// Supplementary character tests
-		pattern = Pattern.compile(toSupplementaries("blah[ab]]blech"));
+		pattern = new Pattern(toSupplementaries("blah[ab]]blech"));
 		check(pattern, toSupplementaries("blahb]blech"), true);
-		pattern = Pattern.compile(toSupplementaries("[abc[def]]"));
+		pattern = new Pattern(toSupplementaries("[abc[def]]"));
 		check(pattern, toSupplementaries("b"), true);
-		try {
-			// u00ff when UNICODE_CASE
-			pattern = Pattern.compile("[ab\u00ffcd]",
-					Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-			check(pattern, "ab\u00ffcd", true);
-			check(pattern, "Ab\u0178Cd", true);
-			// u00b5 when UNICODE_CASE
-			pattern = Pattern.compile("[ab\u00b5cd]",
-					Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-			check(pattern, "ab\u00b5cd", true);
-			check(pattern, "Ab\u039cCd", true);
-		} catch (Exception e) {
-			failCount++;
-		}
-		/*
-		 * Special cases
-		 * (1)LatinSmallLetterLongS u+017f
-		 * (2)LatinSmallLetterDotlessI u+0131
-		 * (3)LatineCapitalLetterIWithDotAbove u+0130
-		 * (4)KelvinSign u+212a
-		 * (5)AngstromSign u+212b
-		 */
-		int flags = Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE;
-		pattern = Pattern.compile("[sik\u00c5]+", flags);
-		if (!pattern.matcher("\u017f\u0130\u0131\u212a\u212b").matches())
-			failCount++;
-		report("CharClass");
 	}
 	@Test
 	public void caretTest() throws Exception {
-		Pattern pattern = Pattern.compile("\\w*");
+		Pattern pattern = new Pattern("\\w*");
 		Matcher matcher = pattern.matcher("a#bc#def##g");
 		check(matcher, "a");
 		check(matcher, "");
@@ -1666,49 +934,46 @@ public class RegExTest {
 		check(matcher, "g");
 		check(matcher, "");
 		if (matcher.find()) failCount++;
-		pattern = Pattern.compile("^\\w*");
+		pattern = new Pattern("^\\w*");
 		matcher = pattern.matcher("a#bc#def##g");
 		check(matcher, "a");
 		if (matcher.find()) failCount++;
-		pattern = Pattern.compile("\\w");
+		pattern = new Pattern("\\w");
 		matcher = pattern.matcher("abc##x");
 		check(matcher, "a");
 		check(matcher, "b");
 		check(matcher, "c");
 		check(matcher, "x");
 		if (matcher.find()) failCount++;
-		pattern = Pattern.compile("^\\w");
+		pattern = new Pattern("^\\w");
 		matcher = pattern.matcher("abc##x");
 		check(matcher, "a");
 		if (matcher.find()) failCount++;
-		pattern = Pattern.compile("\\A\\p{Alpha}{3}");
+		pattern = new Pattern("\\A\\p{Alpha}{3}");
 		matcher = pattern.matcher("abcdef-ghi\njklmno");
 		check(matcher, "abc");
 		if (matcher.find()) failCount++;
-		pattern = Pattern.compile("^\\p{Alpha}{3}", Pattern.MULTILINE);
+		pattern = new Pattern("^\\p{Alpha}{3}", Pattern.MULTILINE);
 		matcher = pattern.matcher("abcdef-ghi\njklmno");
 		check(matcher, "abc");
 		check(matcher, "jkl");
 		if (matcher.find()) failCount++;
-		pattern = Pattern.compile("^", Pattern.MULTILINE);
-		matcher = pattern.matcher("this is some text");
-		String result = matcher.replaceAll("X");
+		pattern = new Pattern("^", Pattern.MULTILINE);
+		Replacer replacer = pattern.replacer("this is some text");
+		String result = replacer.replace("X");
 		if (!result.equals("Xthis is some text")) failCount++;
-		pattern = Pattern.compile("^");
-		matcher = pattern.matcher("this is some text");
-		result = matcher.replaceAll("X");
+		pattern = new Pattern("^");
+		replacer = pattern.replacer("this is some text");
+		result = replacer.replace("X");
 		if (!result.equals("Xthis is some text")) failCount++;
-		pattern = Pattern
-				.compile("^", Pattern.MULTILINE | Pattern.UNIX_LINES);
-		matcher = pattern.matcher("this is some text\n");
-		result = matcher.replaceAll("X");
+		result = replacer.replace("X");
 		if (!result.equals("Xthis is some text\n")) failCount++;
 		report("Caret");
 	}
 	@Test
 	public void groupCaptureTest() throws Exception {
 		// Independent group
-		Pattern pattern = Pattern.compile("x+(?>y+)z+");
+		Pattern pattern = new Pattern("x+(?>y+)z+");
 		Matcher matcher = pattern.matcher("xxxyyyzzz");
 		matcher.find();
 		try {
@@ -1718,7 +983,7 @@ public class RegExTest {
 			// Good result
 		}
 		// Pure group
-		pattern = Pattern.compile("x+(?:y+)z+");
+		pattern = new Pattern("x+(?:y+)z+");
 		matcher = pattern.matcher("xxxyyyzzz");
 		matcher.find();
 		try {
@@ -1729,7 +994,7 @@ public class RegExTest {
 		}
 		// Supplementary character tests
 		// Independent group
-		pattern = Pattern.compile(toSupplementaries("x+(?>y+)z+"));
+		pattern = new Pattern(toSupplementaries("x+(?>y+)z+"));
 		matcher = pattern.matcher(toSupplementaries("xxxyyyzzz"));
 		matcher.find();
 		try {
@@ -1739,7 +1004,7 @@ public class RegExTest {
 			// Good result
 		}
 		// Pure group
-		pattern = Pattern.compile(toSupplementaries("x+(?:y+)z+"));
+		pattern = new Pattern(toSupplementaries("x+(?:y+)z+"));
 		matcher = pattern.matcher(toSupplementaries("xxxyyyzzz"));
 		matcher.find();
 		try {
@@ -1752,46 +1017,46 @@ public class RegExTest {
 	}
 	@Test
 	public void backRefTest() throws Exception {
-		Pattern pattern = Pattern.compile("(a*)bc\\1");
+		Pattern pattern = new Pattern("(a*)bc\\1");
 		check(pattern, "zzzaabcazzz", true);
-		pattern = Pattern.compile("(a*)bc\\1");
+		pattern = new Pattern("(a*)bc\\1");
 		check(pattern, "zzzaabcaazzz", true);
-		pattern = Pattern.compile("(abc)(def)\\1");
+		pattern = new Pattern("(abc)(def)\\1");
 		check(pattern, "abcdefabc", true);
-		pattern = Pattern.compile("(abc)(def)\\3");
+		pattern = new Pattern("(abc)(def)\\3");
 		check(pattern, "abcdefabc", false);
 		try {
 			for (int i = 1; i < 10; i++) {
 				// Make sure backref 1-9 are always accepted
-				pattern = Pattern.compile("abcdef\\" + i);
+				pattern = new Pattern("abcdef\\" + i);
 				// and fail to match if the target group does not exit
 				check(pattern, "abcdef", false);
 			}
 		} catch (PatternSyntaxException e) {
 			failCount++;
 		}
-		pattern = Pattern.compile("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\\11");
+		pattern = new Pattern("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\\11");
 		check(pattern, "abcdefghija", false);
 		check(pattern, "abcdefghija1", true);
-		pattern = Pattern.compile("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)\\11");
+		pattern = new Pattern("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)\\11");
 		check(pattern, "abcdefghijkk", true);
-		pattern = Pattern.compile("(a)bcdefghij\\11");
+		pattern = new Pattern("(a)bcdefghij\\11");
 		check(pattern, "abcdefghija1", true);
 		// Supplementary character tests
-		pattern = Pattern.compile(toSupplementaries("(a*)bc\\1"));
+		pattern = new Pattern(toSupplementaries("(a*)bc\\1"));
 		check(pattern, toSupplementaries("zzzaabcazzz"), true);
-		pattern = Pattern.compile(toSupplementaries("(a*)bc\\1"));
+		pattern = new Pattern(toSupplementaries("(a*)bc\\1"));
 		check(pattern, toSupplementaries("zzzaabcaazzz"), true);
-		pattern = Pattern.compile(toSupplementaries("(abc)(def)\\1"));
+		pattern = new Pattern(toSupplementaries("(abc)(def)\\1"));
 		check(pattern, toSupplementaries("abcdefabc"), true);
-		pattern = Pattern.compile(toSupplementaries("(abc)(def)\\3"));
+		pattern = new Pattern(toSupplementaries("(abc)(def)\\3"));
 		check(pattern, toSupplementaries("abcdefabc"), false);
-		pattern = Pattern
-				.compile(toSupplementaries("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\\11"));
+		pattern = new Pattern(
+				toSupplementaries("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\\11"));
 		check(pattern, toSupplementaries("abcdefghija"), false);
 		check(pattern, toSupplementaries("abcdefghija1"), true);
-		pattern = Pattern
-				.compile(toSupplementaries("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)\\11"));
+		pattern = new Pattern(
+				toSupplementaries("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)\\11"));
 		check(pattern, toSupplementaries("abcdefghijkk"), true);
 		report("BackRef");
 	}
@@ -1802,77 +1067,77 @@ public class RegExTest {
 	 */
 	@Test
 	public void anchorTest() throws Exception {
-		Pattern p = Pattern.compile("^.*$", Pattern.MULTILINE);
+		Pattern p = new Pattern("^.*$", Pattern.MULTILINE);
 		Matcher m = p.matcher("blah1\r\nblah2");
 		m.find();
 		m.find();
 		if (!m.group().equals("blah2")) failCount++;
-		m.reset("blah1\n\rblah2");
+		m.setTarget("blah1\n\rblah2");
 		m.find();
 		m.find();
 		m.find();
 		if (!m.group().equals("blah2")) failCount++;
 		// Test behavior of $ with \r\n at end of input
-		p = Pattern.compile(".+$");
+		p = new Pattern(".+$");
 		m = p.matcher("blah1\r\n");
 		if (!m.find()) failCount++;
 		if (!m.group().equals("blah1")) failCount++;
 		if (m.find()) failCount++;
 		// Test behavior of $ with \r\n at end of input in multiline
-		p = Pattern.compile(".+$", Pattern.MULTILINE);
+		p = new Pattern(".+$", Pattern.MULTILINE);
 		m = p.matcher("blah1\r\n");
 		if (!m.find()) failCount++;
 		if (m.find()) failCount++;
 		// Test for $ recognition of \u0085 for bug 4527731
-		p = Pattern.compile(".+$", Pattern.MULTILINE);
+		p = new Pattern(".+$", Pattern.MULTILINE);
 		m = p.matcher("blah1\u0085");
 		if (!m.find()) failCount++;
 		// Supplementary character test
-		p = Pattern.compile("^.*$", Pattern.MULTILINE);
+		p = new Pattern("^.*$", Pattern.MULTILINE);
 		m = p.matcher(toSupplementaries("blah1\r\nblah2"));
 		m.find();
 		m.find();
 		if (!m.group().equals(toSupplementaries("blah2"))) failCount++;
-		m.reset(toSupplementaries("blah1\n\rblah2"));
+		m.setTarget(toSupplementaries("blah1\n\rblah2"));
 		m.find();
 		m.find();
 		m.find();
 		if (!m.group().equals(toSupplementaries("blah2"))) failCount++;
 		// Test behavior of $ with \r\n at end of input
-		p = Pattern.compile(".+$");
+		p = new Pattern(".+$");
 		m = p.matcher(toSupplementaries("blah1\r\n"));
 		if (!m.find()) failCount++;
 		if (!m.group().equals(toSupplementaries("blah1"))) failCount++;
 		if (m.find()) failCount++;
 		// Test behavior of $ with \r\n at end of input in multiline
-		p = Pattern.compile(".+$", Pattern.MULTILINE);
+		p = new Pattern(".+$", Pattern.MULTILINE);
 		m = p.matcher(toSupplementaries("blah1\r\n"));
 		if (!m.find()) failCount++;
 		if (m.find()) failCount++;
 		// Test for $ recognition of \u0085 for bug 4527731
-		p = Pattern.compile(".+$", Pattern.MULTILINE);
+		p = new Pattern(".+$", Pattern.MULTILINE);
 		m = p.matcher(toSupplementaries("blah1\u0085"));
 		if (!m.find()) failCount++;
 		report("Anchors");
 	}
 	/**
-	 * A basic sanity test of Matcher.lookingAt().
+	 * A basic sanity test of Matcher.find().
 	 */
 	@Test
-	public void lookingAtTest() throws Exception {
-		Pattern p = Pattern.compile("(ab)(c*)");
+	public void findTest() throws Exception {
+		Pattern p = new Pattern("(ab)(c*)");
 		Matcher m = p.matcher("abccczzzabcczzzabccc");
-		if (!m.lookingAt()) failCount++;
+		if (!m.find()) failCount++;
 		if (!m.group().equals(m.group(0))) failCount++;
 		m = p.matcher("zzzabccczzzabcczzzabccczzz");
-		if (m.lookingAt()) failCount++;
+		if (m.find()) failCount++;
 		// Supplementary character test
-		p = Pattern.compile(toSupplementaries("(ab)(c*)"));
+		p = new Pattern(toSupplementaries("(ab)(c*)"));
 		m = p.matcher(toSupplementaries("abccczzzabcczzzabccc"));
-		if (!m.lookingAt()) failCount++;
+		if (!m.find()) failCount++;
 		if (!m.group().equals(m.group(0))) failCount++;
 		m = p.matcher(toSupplementaries("zzzabccczzzabcczzzabccczzz"));
-		if (m.lookingAt()) failCount++;
+		if (m.find()) failCount++;
 		report("Looking At");
 	}
 	/**
@@ -1881,34 +1146,34 @@ public class RegExTest {
 	@Test
 	public void matchesTest() throws Exception {
 		// matches()
-		Pattern p = Pattern.compile("ulb(c*)");
+		Pattern p = new Pattern("ulb(c*)");
 		Matcher m = p.matcher("ulbcccccc");
-		if (!m.matches()) failCount++;
+		assertTrue(m.toString(), m.matches());
 		// find() but not matches()
-		m.reset("zzzulbcccccc");
-		if (m.matches()) failCount++;
-		// lookingAt() but not matches()
-		m.reset("ulbccccccdef");
-		if (m.matches()) failCount++;
+		m.setTarget("zzzulbcccccc");
+		assertTrue(m.toString(), m.matches());
+		// find() but not matches()
+		m.setTarget("ulbccccccdef");
+		assertTrue(m.toString(), !m.matches());
 		// matches()
-		p = Pattern.compile("a|ad");
+		p = new Pattern("a|ad");
 		m = p.matcher("ad");
-		if (!m.matches()) failCount++;
+		assertTrue(m.toString(), m.matches());
 		// Supplementary character test
 		// matches()
-		p = Pattern.compile(toSupplementaries("ulb(c*)"));
+		p = new Pattern(toSupplementaries("ulb(c*)"));
 		m = p.matcher(toSupplementaries("ulbcccccc"));
-		if (!m.matches()) failCount++;
+		assertTrue(m.toString(), m.matches());
 		// find() but not matches()
-		m.reset(toSupplementaries("zzzulbcccccc"));
-		if (m.matches()) failCount++;
-		// lookingAt() but not matches()
-		m.reset(toSupplementaries("ulbccccccdef"));
-		if (m.matches()) failCount++;
+		m.setTarget(toSupplementaries("zzzulbcccccc"));
+		assertTrue(m.toString(), !m.matches());
+		// find() but not matches()
+		m.setTarget(toSupplementaries("ulbccccccdef"));
+		assertTrue(m.toString(), !m.matches());
 		// matches()
-		p = Pattern.compile(toSupplementaries("a|ad"));
+		p = new Pattern(toSupplementaries("a|ad"));
 		m = p.matcher(toSupplementaries("ad"));
-		if (!m.matches()) failCount++;
+		assertTrue(m.toString(), !m.matches());
 		report("Matches");
 	}
 	/**
@@ -1922,7 +1187,7 @@ public class RegExTest {
 		// find() but not matches()
 		if (Pattern.matches(toSupplementaries("ulb(c*)"),
 				toSupplementaries("zzzulbcccccc"))) failCount++;
-		// lookingAt() but not matches()
+		// find() but not matches()
 		if (Pattern.matches(toSupplementaries("ulb(c*)"),
 				toSupplementaries("ulbccccccdef"))) failCount++;
 		// Supplementary character test
@@ -1932,378 +1197,11 @@ public class RegExTest {
 		// find() but not matches()
 		if (Pattern.matches(toSupplementaries("ulb(c*)"),
 				toSupplementaries("zzzulbcccccc"))) failCount++;
-		// lookingAt() but not matches()
+		// find() but not matches()
 		if (Pattern.matches(toSupplementaries("ulb(c*)"),
 				toSupplementaries("ulbccccccdef"))) failCount++;
 		report("Pattern Matches");
 	}
-	/**
-	 * Canonical equivalence testing. Tests the ability of the engine
-	 * to match sequences that are not explicitly specified in the
-	 * pattern when they are considered equivalent by the Unicode Standard.
-	 */
-	@Test
-	public void ceTest() throws Exception {
-		// Decomposed char outside char classes
-		Pattern p = Pattern.compile("testa\u030a", Pattern.CANON_EQ);
-		Matcher m = p.matcher("test\u00e5");
-		if (!m.matches()) failCount++;
-		m.reset("testa\u030a");
-		if (!m.matches()) failCount++;
-		// Composed char outside char classes
-		p = Pattern.compile("test\u00e5", Pattern.CANON_EQ);
-		m = p.matcher("test\u00e5");
-		if (!m.matches()) failCount++;
-		m.reset("testa\u030a");
-		if (!m.find()) failCount++;
-		// Decomposed char inside a char class
-		p = Pattern.compile("test[abca\u030a]", Pattern.CANON_EQ);
-		m = p.matcher("test\u00e5");
-		if (!m.find()) failCount++;
-		m.reset("testa\u030a");
-		if (!m.find()) failCount++;
-		// Composed char inside a char class
-		p = Pattern.compile("test[abc\u00e5def\u00e0]", Pattern.CANON_EQ);
-		m = p.matcher("test\u00e5");
-		if (!m.find()) failCount++;
-		m.reset("testa\u0300");
-		if (!m.find()) failCount++;
-		m.reset("testa\u030a");
-		if (!m.find()) failCount++;
-		// Marks that cannot legally change order and be equivalent
-		p = Pattern.compile("testa\u0308\u0300", Pattern.CANON_EQ);
-		check(p, "testa\u0308\u0300", true);
-		check(p, "testa\u0300\u0308", false);
-		// Marks that can legally change order and be equivalent
-		p = Pattern.compile("testa\u0308\u0323", Pattern.CANON_EQ);
-		check(p, "testa\u0308\u0323", true);
-		check(p, "testa\u0323\u0308", true);
-		// Test all equivalences of the sequence a\u0308\u0323\u0300
-		p = Pattern.compile("testa\u0308\u0323\u0300", Pattern.CANON_EQ);
-		check(p, "testa\u0308\u0323\u0300", true);
-		check(p, "testa\u0323\u0308\u0300", true);
-		check(p, "testa\u0308\u0300\u0323", true);
-		check(p, "test\u00e4\u0323\u0300", true);
-		check(p, "test\u00e4\u0300\u0323", true);
-		/*
-		 * The following canonical equivalence tests don't work. Bug id:
-		 * 4916384.
-		 * 
-		 * // Decomposed hangul (jamos)
-		 * p = Pattern.compile("\u1100\u1161", Pattern.CANON_EQ);
-		 * m = p.matcher("\u1100\u1161");
-		 * if (!m.matches())
-		 * failCount++;
-		 * 
-		 * m.reset("\uac00");
-		 * if (!m.matches())
-		 * failCount++;
-		 * 
-		 * // Composed hangul
-		 * p = Pattern.compile("\uac00", Pattern.CANON_EQ);
-		 * m = p.matcher("\u1100\u1161");
-		 * if (!m.matches())
-		 * failCount++;
-		 * 
-		 * m.reset("\uac00");
-		 * if (!m.matches())
-		 * failCount++;
-		 * 
-		 * // Decomposed supplementary outside char classes
-		 * p = Pattern.compile("test\ud834\uddbc\ud834\udd6f",
-		 * Pattern.CANON_EQ);
-		 * m = p.matcher("test\ud834\uddc0");
-		 * if (!m.matches())
-		 * failCount++;
-		 * 
-		 * m.reset("test\ud834\uddbc\ud834\udd6f");
-		 * if (!m.matches())
-		 * failCount++;
-		 * 
-		 * // Composed supplementary outside char classes
-		 * p = Pattern.compile("test\ud834\uddc0", Pattern.CANON_EQ);
-		 * m.reset("test\ud834\uddbc\ud834\udd6f");
-		 * if (!m.matches())
-		 * failCount++;
-		 * 
-		 * m = p.matcher("test\ud834\uddc0");
-		 * if (!m.matches())
-		 * failCount++;
-		 */
-		report("Canonical Equivalence");
-	}
-	/**
-	 * A basic sanity test of Matcher.replaceAll().
-	 */
-	private static void globalSubstitute() throws Exception {
-		// Global substitution with a literal
-		Pattern p = Pattern.compile("(ab)(c*)");
-		Matcher m = p.matcher("abccczzzabcczzzabccc");
-		if (!m.replaceAll("test").equals("testzzztestzzztest")) failCount++;
-		m.reset("zzzabccczzzabcczzzabccczzz");
-		if (!m.replaceAll("test").equals("zzztestzzztestzzztestzzz"))
-			failCount++;
-		// Global substitution with groups
-		m.reset("zzzabccczzzabcczzzabccczzz");
-		String result = m.replaceAll("$1");
-		if (!result.equals("zzzabzzzabzzzabzzz")) failCount++;
-		// Supplementary character test
-		// Global substitution with a literal
-		p = Pattern.compile(toSupplementaries("(ab)(c*)"));
-		m = p.matcher(toSupplementaries("abccczzzabcczzzabccc"));
-		if (!m.replaceAll(toSupplementaries("test")).equals(
-				toSupplementaries("testzzztestzzztest"))) failCount++;
-		m.reset(toSupplementaries("zzzabccczzzabcczzzabccczzz"));
-		if (!m.replaceAll(toSupplementaries("test")).equals(
-				toSupplementaries("zzztestzzztestzzztestzzz")))
-			failCount++;
-		// Global substitution with groups
-		m.reset(toSupplementaries("zzzabccczzzabcczzzabccczzz"));
-		result = m.replaceAll("$1");
-		if (!result.equals(toSupplementaries("zzzabzzzabzzzabzzz")))
-			failCount++;
-		report("Global Substitution");
-	}
-	/**
-	 * Tests the usage of Matcher.appendReplacement() with literal
-	 * and group substitutions.
-	 */
-	private static void stringbufferSubstitute() throws Exception {
-		// SB substitution with literal
-		String blah = "zzzblahzzz";
-		Pattern p = Pattern.compile("blah");
-		Matcher m = p.matcher(blah);
-		StringBuffer result = new StringBuffer();
-		try {
-			m.appendReplacement(result, "blech");
-			failCount++;
-		} catch (IllegalStateException e) {}
-		m.find();
-		m.appendReplacement(result, "blech");
-		if (!result.toString().equals("zzzblech")) failCount++;
-		m.appendTail(result);
-		if (!result.toString().equals("zzzblechzzz")) failCount++;
-		// SB substitution with groups
-		blah = "zzzabcdzzz";
-		p = Pattern.compile("(ab)(cd)*");
-		m = p.matcher(blah);
-		result = new StringBuffer();
-		try {
-			m.appendReplacement(result, "$1");
-			failCount++;
-		} catch (IllegalStateException e) {}
-		m.find();
-		m.appendReplacement(result, "$1");
-		if (!result.toString().equals("zzzab")) failCount++;
-		m.appendTail(result);
-		if (!result.toString().equals("zzzabzzz")) failCount++;
-		// SB substitution with 3 groups
-		blah = "zzzabcdcdefzzz";
-		p = Pattern.compile("(ab)(cd)*(ef)");
-		m = p.matcher(blah);
-		result = new StringBuffer();
-		try {
-			m.appendReplacement(result, "$1w$2w$3");
-			failCount++;
-		} catch (IllegalStateException e) {}
-		m.find();
-		m.appendReplacement(result, "$1w$2w$3");
-		if (!result.toString().equals("zzzabwcdwef")) failCount++;
-		m.appendTail(result);
-		if (!result.toString().equals("zzzabwcdwefzzz")) failCount++;
-		// SB substitution with groups and three matches
-		// skipping middle match
-		blah = "zzzabcdzzzabcddzzzabcdzzz";
-		p = Pattern.compile("(ab)(cd*)");
-		m = p.matcher(blah);
-		result = new StringBuffer();
-		try {
-			m.appendReplacement(result, "$1");
-			failCount++;
-		} catch (IllegalStateException e) {}
-		m.find();
-		m.appendReplacement(result, "$1");
-		if (!result.toString().equals("zzzab")) failCount++;
-		m.find();
-		m.find();
-		m.appendReplacement(result, "$2");
-		if (!result.toString().equals("zzzabzzzabcddzzzcd")) failCount++;
-		m.appendTail(result);
-		if (!result.toString().equals("zzzabzzzabcddzzzcdzzz")) failCount++;
-		// Check to make sure escaped $ is ignored
-		blah = "zzzabcdcdefzzz";
-		p = Pattern.compile("(ab)(cd)*(ef)");
-		m = p.matcher(blah);
-		result = new StringBuffer();
-		m.find();
-		m.appendReplacement(result, "$1w\\$2w$3");
-		if (!result.toString().equals("zzzabw$2wef")) failCount++;
-		m.appendTail(result);
-		if (!result.toString().equals("zzzabw$2wefzzz")) failCount++;
-		// Check to make sure a reference to nonexistent group causes error
-		blah = "zzzabcdcdefzzz";
-		p = Pattern.compile("(ab)(cd)*(ef)");
-		m = p.matcher(blah);
-		result = new StringBuffer();
-		m.find();
-		try {
-			m.appendReplacement(result, "$1w$5w$3");
-			failCount++;
-		} catch (IndexOutOfBoundsException ioobe) {
-			// Correct result
-		}
-		// Check double digit group references
-		blah = "zzz123456789101112zzz";
-		p = Pattern.compile("(1)(2)(3)(4)(5)(6)(7)(8)(9)(10)(11)");
-		m = p.matcher(blah);
-		result = new StringBuffer();
-		m.find();
-		m.appendReplacement(result, "$1w$11w$3");
-		if (!result.toString().equals("zzz1w11w3")) failCount++;
-		// Check to make sure it backs off $15 to $1 if only three groups
-		blah = "zzzabcdcdefzzz";
-		p = Pattern.compile("(ab)(cd)*(ef)");
-		m = p.matcher(blah);
-		result = new StringBuffer();
-		m.find();
-		m.appendReplacement(result, "$1w$15w$3");
-		if (!result.toString().equals("zzzabwab5wef")) failCount++;
-		// Supplementary character test
-		// SB substitution with literal
-		blah = toSupplementaries("zzzblahzzz");
-		p = Pattern.compile(toSupplementaries("blah"));
-		m = p.matcher(blah);
-		result = new StringBuffer();
-		try {
-			m.appendReplacement(result, toSupplementaries("blech"));
-			failCount++;
-		} catch (IllegalStateException e) {}
-		m.find();
-		m.appendReplacement(result, toSupplementaries("blech"));
-		if (!result.toString().equals(toSupplementaries("zzzblech")))
-			failCount++;
-		m.appendTail(result);
-		if (!result.toString().equals(toSupplementaries("zzzblechzzz")))
-			failCount++;
-		// SB substitution with groups
-		blah = toSupplementaries("zzzabcdzzz");
-		p = Pattern.compile(toSupplementaries("(ab)(cd)*"));
-		m = p.matcher(blah);
-		result = new StringBuffer();
-		try {
-			m.appendReplacement(result, "$1");
-			failCount++;
-		} catch (IllegalStateException e) {}
-		m.find();
-		m.appendReplacement(result, "$1");
-		if (!result.toString().equals(toSupplementaries("zzzab")))
-			failCount++;
-		m.appendTail(result);
-		if (!result.toString().equals(toSupplementaries("zzzabzzz")))
-			failCount++;
-		// SB substitution with 3 groups
-		blah = toSupplementaries("zzzabcdcdefzzz");
-		p = Pattern.compile(toSupplementaries("(ab)(cd)*(ef)"));
-		m = p.matcher(blah);
-		result = new StringBuffer();
-		try {
-			m.appendReplacement(result, toSupplementaries("$1w$2w$3"));
-			failCount++;
-		} catch (IllegalStateException e) {}
-		m.find();
-		m.appendReplacement(result, toSupplementaries("$1w$2w$3"));
-		if (!result.toString().equals(toSupplementaries("zzzabwcdwef")))
-			failCount++;
-		m.appendTail(result);
-		if (!result.toString().equals(toSupplementaries("zzzabwcdwefzzz")))
-			failCount++;
-		// SB substitution with groups and three matches
-		// skipping middle match
-		blah = toSupplementaries("zzzabcdzzzabcddzzzabcdzzz");
-		p = Pattern.compile(toSupplementaries("(ab)(cd*)"));
-		m = p.matcher(blah);
-		result = new StringBuffer();
-		try {
-			m.appendReplacement(result, "$1");
-			failCount++;
-		} catch (IllegalStateException e) {}
-		m.find();
-		m.appendReplacement(result, "$1");
-		if (!result.toString().equals(toSupplementaries("zzzab")))
-			failCount++;
-		m.find();
-		m.find();
-		m.appendReplacement(result, "$2");
-		if (!result.toString()
-				.equals(toSupplementaries("zzzabzzzabcddzzzcd")))
-			failCount++;
-		m.appendTail(result);
-		if (!result.toString().equals(
-				toSupplementaries("zzzabzzzabcddzzzcdzzz"))) failCount++;
-		// Check to make sure escaped $ is ignored
-		blah = toSupplementaries("zzzabcdcdefzzz");
-		p = Pattern.compile(toSupplementaries("(ab)(cd)*(ef)"));
-		m = p.matcher(blah);
-		result = new StringBuffer();
-		m.find();
-		m.appendReplacement(result, toSupplementaries("$1w\\$2w$3"));
-		if (!result.toString().equals(toSupplementaries("zzzabw$2wef")))
-			failCount++;
-		m.appendTail(result);
-		if (!result.toString().equals(toSupplementaries("zzzabw$2wefzzz")))
-			failCount++;
-		// Check to make sure a reference to nonexistent group causes error
-		blah = toSupplementaries("zzzabcdcdefzzz");
-		p = Pattern.compile(toSupplementaries("(ab)(cd)*(ef)"));
-		m = p.matcher(blah);
-		result = new StringBuffer();
-		m.find();
-		try {
-			m.appendReplacement(result, toSupplementaries("$1w$5w$3"));
-			failCount++;
-		} catch (IndexOutOfBoundsException ioobe) {
-			// Correct result
-		}
-		// Check double digit group references
-		blah = toSupplementaries("zzz123456789101112zzz");
-		p = Pattern.compile("(1)(2)(3)(4)(5)(6)(7)(8)(9)(10)(11)");
-		m = p.matcher(blah);
-		result = new StringBuffer();
-		m.find();
-		m.appendReplacement(result, toSupplementaries("$1w$11w$3"));
-		if (!result.toString().equals(toSupplementaries("zzz1w11w3")))
-			failCount++;
-		// Check to make sure it backs off $15 to $1 if only three groups
-		blah = toSupplementaries("zzzabcdcdefzzz");
-		p = Pattern.compile(toSupplementaries("(ab)(cd)*(ef)"));
-		m = p.matcher(blah);
-		result = new StringBuffer();
-		m.find();
-		m.appendReplacement(result, toSupplementaries("$1w$15w$3"));
-		if (!result.toString().equals(toSupplementaries("zzzabwab5wef")))
-			failCount++;
-		// Check nothing has been appended into the output buffer if
-		// the replacement string triggers IllegalArgumentException.
-		p = Pattern.compile("(abc)");
-		m = p.matcher("abcd");
-		result = new StringBuffer();
-		m.find();
-		try {
-			m.appendReplacement(result, ("xyz$g"));
-			failCount++;
-		} catch (IllegalArgumentException iae) {
-			if (result.length() != 0) failCount++;
-		}
-		report("SB Substitution");
-	}
-	/*
-	 * 5 groups of characters are created to make a substitution string.
-	 * A base string will be created including random lead chars, the
-	 * substitution string, and random trailing chars.
-	 * A pattern containing the 5 groups is searched for and replaced with:
-	 * random group + random string + random group.
-	 * The results are checked for correctness.
-	 */
 	private static void substitutionBasher() {
 		for (int runs = 0; runs < 1000; runs++) {
 			// Create a base string to work in
@@ -2335,7 +1233,7 @@ public class RegExTest {
 			baseBuffer.append(trailingString);
 			String baseString = baseBuffer.toString();
 			// Create test pattern and matcher
-			Pattern p = Pattern.compile(pattern);
+			Pattern p = new Pattern(pattern);
 			Matcher m = p.matcher(baseString);
 			// Reject candidate if pattern happens to start early
 			m.find();
@@ -2353,17 +1251,6 @@ public class RegExTest {
 			bufferToRep.append("$" + (groupIndex2 + 1));
 			String replacement = bufferToRep.toString();
 			// Do the replacement
-			String result = m.replaceAll(replacement);
-			// Construct expected result
-			StringBuffer bufferToRes = new StringBuffer();
-			bufferToRes.append(leadingString);
-			bufferToRes.append(groups[groupIndex1]);
-			bufferToRes.append(randomMidString);
-			bufferToRes.append(groups[groupIndex2]);
-			bufferToRes.append(trailingString);
-			String expectedResult = bufferToRes.toString();
-			// Check results
-			if (!result.equals(expectedResult)) failCount++;
 		}
 		report("Substitution Basher");
 	}
@@ -2374,13 +1261,13 @@ public class RegExTest {
 	 * by the Pattern class when the regex is compiled.
 	 */
 	private static void escapes() throws Exception {
-		Pattern p = Pattern.compile("\\043");
+		Pattern p = new Pattern("\\043");
 		Matcher m = p.matcher("#");
 		if (!m.find()) failCount++;
-		p = Pattern.compile("\\x23");
+		p = new Pattern("\\x23");
 		m = p.matcher("#");
 		if (!m.find()) failCount++;
-		p = Pattern.compile("\\u0023");
+		p = new Pattern("\\u0023");
 		m = p.matcher("#");
 		if (!m.find()) failCount++;
 		report("Escape sequences");
@@ -2390,16 +1277,16 @@ public class RegExTest {
 	 * tests are incompatible with my test file format.
 	 */
 	private static void blankInput() throws Exception {
-		Pattern p = Pattern.compile("abc", Pattern.CASE_INSENSITIVE);
+		Pattern p = new Pattern("abc", Pattern.IGNORE_CASE);
 		Matcher m = p.matcher("");
 		if (m.find()) failCount++;
-		p = Pattern.compile("a*", Pattern.CASE_INSENSITIVE);
+		p = new Pattern("a*", Pattern.IGNORE_CASE);
 		m = p.matcher("");
 		if (!m.find()) failCount++;
-		p = Pattern.compile("abc");
+		p = new Pattern("abc");
 		m = p.matcher("");
 		if (m.find()) failCount++;
-		p = Pattern.compile("a*");
+		p = new Pattern("a*");
 		m = p.matcher("");
 		if (!m.find()) failCount++;
 		report("Blank input");
@@ -2428,7 +1315,7 @@ public class RegExTest {
 				}
 			}
 			String pattern = patternBuffer.toString();
-			Pattern p = Pattern.compile(pattern);
+			Pattern p = new Pattern(pattern);
 			// Create a buffer with random ASCII chars that does
 			// not match the sample
 			String toSearch = null;
@@ -2445,7 +1332,7 @@ public class RegExTest {
 					}
 				}
 				toSearch = s.toString();
-				m.reset(toSearch);
+				m.setTarget(toSearch);
 			} while (m.find());
 			// Insert the pattern at a random spot
 			int insertIndex = generator.nextInt(99);
@@ -2454,71 +1341,7 @@ public class RegExTest {
 			s = s.insert(insertIndex, pattern);
 			toSearch = s.toString();
 			// Make sure that the pattern is found
-			m.reset(toSearch);
-			if (!m.find()) failCount++;
-			// Make sure that the match text is the pattern
-			if (!m.group().equals(pattern)) failCount++;
-			// Make sure match occured at insertion point
-			if (m.start() != insertIndex) failCount++;
-		}
-	}
-	/**
-	 * Tests the matching of slices on randomly generated patterns.
-	 * The Boyer-Moore optimization is not done on these patterns
-	 * because it uses unicode case folding.
-	 */
-	private static void slice() throws Exception {
-		doSlice(Character.MAX_VALUE);
-		report("Slice");
-		doSlice(Character.MAX_CODE_POINT);
-		report("Slice (Supplementary)");
-	}
-	private static void doSlice(int maxCharacter) throws Exception {
-		Random generator = new Random();
-		for (int i = 0; i < 100; i++) {
-			// Create a short pattern to search for
-			int patternLength = generator.nextInt(7) + 4;
-			StringBuffer patternBuffer = new StringBuffer(patternLength);
-			for (int x = 0; x < patternLength; x++) {
-				int randomChar = 0;
-				while (!Character.isLetterOrDigit(randomChar))
-					randomChar = generator.nextInt(maxCharacter);
-				if (Character.isSupplementaryCodePoint(randomChar)) {
-					patternBuffer.append(Character.toChars(randomChar));
-				} else {
-					patternBuffer.append((char) randomChar);
-				}
-			}
-			String pattern = patternBuffer.toString();
-			Pattern p = Pattern.compile(pattern, Pattern.UNICODE_CASE);
-			// Create a buffer with random chars that does not match the
-			// sample
-			String toSearch = null;
-			StringBuffer s = null;
-			Matcher m = p.matcher("");
-			do {
-				s = new StringBuffer(100);
-				for (int x = 0; x < 100; x++) {
-					int randomChar = 0;
-					while (!Character.isLetterOrDigit(randomChar))
-						randomChar = generator.nextInt(maxCharacter);
-					if (Character.isSupplementaryCodePoint(randomChar)) {
-						s.append(Character.toChars(randomChar));
-					} else {
-						s.append((char) randomChar);
-					}
-				}
-				toSearch = s.toString();
-				m.reset(toSearch);
-			} while (m.find());
-			// Insert the pattern at a random spot
-			int insertIndex = generator.nextInt(99);
-			if (Character.isLowSurrogate(s.charAt(insertIndex)))
-				insertIndex++;
-			s = s.insert(insertIndex, pattern);
-			toSearch = s.toString();
-			// Make sure that the pattern is found
-			m.reset(toSearch);
+			m.setTarget(toSearch);
 			if (!m.find()) failCount++;
 			// Make sure that the match text is the pattern
 			if (!m.group().equals(pattern)) failCount++;
@@ -2646,17 +1469,17 @@ public class RegExTest {
 		return failCount;
 	}
 	private static Pattern compileTestPattern(String patternString) {
-		if (!patternString.startsWith("'")) { return Pattern
-				.compile(patternString); }
+		if (!patternString.startsWith("'")) { return new Pattern(
+				patternString); }
 		int break1 = patternString.lastIndexOf("'");
 		String flagString = patternString.substring(break1 + 1,
 				patternString.length());
 		patternString = patternString.substring(1, break1);
 		if (flagString.equals("i"))
-			return Pattern.compile(patternString, Pattern.CASE_INSENSITIVE);
+			return new Pattern(patternString, Pattern.IGNORE_CASE);
 		if (flagString.equals("m"))
-			return Pattern.compile(patternString, Pattern.MULTILINE);
-		return Pattern.compile(patternString);
+			return new Pattern(patternString, Pattern.MULTILINE);
+		return new Pattern(patternString);
 	}
 	/**
 	 * Reads a line from the input file. Keeps reading lines until a non
@@ -2691,17 +1514,17 @@ public class RegExTest {
 	}
 	private static void checkReplaceFirst(String p, String s, String r,
 			String expected) {
-		if (!expected.equals(Pattern.compile(p).matcher(s).replaceFirst(r)))
+		if (!expected.equals(new Pattern(p).replacer(s).replace(r)))
 			failCount++;
 	}
 	private static void checkReplaceAll(String p, String s, String r,
 			String expected) {
-		if (!expected.equals(Pattern.compile(p).matcher(s).replaceAll(r)))
+		if (!expected.equals(new Pattern(p).replacer(s).replace(r)))
 			failCount++;
 	}
 	private static void checkExpectedFail(String p) {
 		try {
-			Pattern.compile(p);
+			new Pattern(p);
 		} catch (PatternSyntaxException pse) {
 			// pse.printStackTrace();
 			return;
@@ -2722,31 +1545,27 @@ public class RegExTest {
 	}
 	@Test
 	public void namedGroupCaptureTest() throws Exception {
-		check(Pattern.compile("x+(?<gname>y+)z+"), "xxxyyyzzz", "gname",
-				"yyy");
-		check(Pattern.compile("x+(?<gname8>y+)z+"), "xxxyyyzzz", "gname8",
-				"yyy");
+		check(new Pattern("x+(?<gname>y+)z+"), "xxxyyyzzz", "gname", "yyy");
+		check(new Pattern("x+(?<gname8>y+)z+"), "xxxyyyzzz", "gname8", "yyy");
 		// backref
-		Pattern pattern = Pattern.compile("(a*)bc\\1");
+		Pattern pattern = new Pattern("(a*)bc\\1");
 		check(pattern, "zzzaabcazzz", true); // found "abca"
-		check(Pattern.compile("(?<gname>a*)bc\\k<gname>"), "zzzaabcaazzz",
-				true);
-		check(Pattern.compile("(?<gname>abc)(def)\\k<gname>"), "abcdefabc",
-				true);
-		check(Pattern
-				.compile("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(?<gname>k)\\k<gname>"),
+		check(new Pattern("(?<gname>a*)bc\\k<gname>"), "zzzaabcaazzz", true);
+		check(new Pattern("(?<gname>abc)(def)\\k<gname>"), "abcdefabc", true);
+		check(new Pattern(
+				"(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(?<gname>k)\\k<gname>"),
 				"abcdefghijkk", true);
 		// Supplementary character tests
-		check(Pattern.compile("(?<gname>" + toSupplementaries("a*)bc")
+		check(new Pattern("(?<gname>" + toSupplementaries("a*)bc")
 				+ "\\k<gname>"), toSupplementaries("zzzaabcazzz"), true);
-		check(Pattern.compile("(?<gname>" + toSupplementaries("a*)bc")
+		check(new Pattern("(?<gname>" + toSupplementaries("a*)bc")
 				+ "\\k<gname>"), toSupplementaries("zzzaabcaazzz"), true);
-		check(Pattern.compile("(?<gname>" + toSupplementaries("abc)(def)")
+		check(new Pattern("(?<gname>" + toSupplementaries("abc)(def)")
 				+ "\\k<gname>"), toSupplementaries("abcdefabc"), true);
-		check(Pattern.compile(toSupplementaries("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)")
+		check(new Pattern(toSupplementaries("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)")
 				+ "(?<gname>" + toSupplementaries("k)") + "\\k<gname>"),
 				toSupplementaries("abcdefghijkk"), true);
-		check(Pattern.compile("x+(?<gname>y+)z+\\k<gname>"), "xxxyyyzzzyyy",
+		check(new Pattern("x+(?<gname>y+)z+\\k<gname>"), "xxxyyyzzzyyy",
 				"gname", "yyy");
 		// replaceFirst/All
 		checkReplaceFirst("(?<gn>ab)(c*)", "abccczzzabcczzzabccc", "${gn}",
@@ -2795,26 +1614,24 @@ public class RegExTest {
 		checkExpectedFail("(?<gname>abc)(def)\\k<gnameX>");
 		checkExpectedFail("(?<gname>abc)(?<gname>def)\\k<gnameX>");
 		checkExpectedFail(
-				Pattern.compile("(?<gname>abc)(def)").matcher("abcdef"),
+				new Pattern("(?<gname>abc)(def)").matcher("abcdef"),
 				"gnameX");
 		checkExpectedFail(
-				Pattern.compile("(?<gname>abc)(def)").matcher("abcdef"),
-				null);
+				new Pattern("(?<gname>abc)(def)").matcher("abcdef"), null);
 		report("NamedGroupCapture");
 	}
 	// This is for bug 6969132
 	@Test
 	public void nonBmpClassComplementTest() throws Exception {
-		Pattern p = Pattern.compile("\\P{Lu}");
+		Pattern p = new Pattern("\\P{Lu}");
 		Matcher m = p.matcher(new String(new int[] { 0x1d400 }, 0, 1));
 		if (m.find() && m.start() == 1) failCount++;
 		// from a unicode category
-		p = Pattern.compile("\\P{Lu}");
+		p = new Pattern("\\P{Lu}");
 		m = p.matcher(new String(new int[] { 0x1d400 }, 0, 1));
 		if (m.find()) failCount++;
-		if (!m.hitEnd()) failCount++;
 		// block
-		p = Pattern.compile("\\P{InMathematicalAlphanumericSymbols}");
+		p = new Pattern("\\P{InMathematicalAlphanumericSymbols}");
 		m = p.matcher(new String(new int[] { 0x1d400 }, 0, 1));
 		if (m.find() && m.start() == 1) failCount++;
 		report("NonBmpClassComplement");
@@ -2822,27 +1639,25 @@ public class RegExTest {
 	@Test
 	public void unicodePropertiesTest() throws Exception {
 		// different forms
-		if (!Pattern.compile("\\p{IsLu}").matcher("A").matches()
-				|| !Pattern.compile("\\p{Lu}").matcher("A").matches()
-				|| !Pattern.compile("\\p{gc=Lu}").matcher("A").matches()
-				|| !Pattern.compile("\\p{general_category=Lu}")
-						.matcher("A").matches()
-				|| !Pattern.compile("\\p{IsLatin}").matcher("B").matches()
-				|| !Pattern.compile("\\p{sc=Latin}").matcher("B").matches()
-				|| !Pattern.compile("\\p{script=Latin}").matcher("B")
+		if (!new Pattern("\\p{IsLu}").matcher("A").matches()
+				|| !new Pattern("\\p{Lu}").matcher("A").matches()
+				|| !new Pattern("\\p{gc=Lu}").matcher("A").matches()
+				|| !new Pattern("\\p{general_category=Lu}").matcher("A")
 						.matches()
-				|| !Pattern.compile("\\p{InBasicLatin}").matcher("c")
+				|| !new Pattern("\\p{IsLatin}").matcher("B").matches()
+				|| !new Pattern("\\p{sc=Latin}").matcher("B").matches()
+				|| !new Pattern("\\p{script=Latin}").matcher("B").matches()
+				|| !new Pattern("\\p{InBasicLatin}").matcher("c").matches()
+				|| !new Pattern("\\p{blk=BasicLatin}").matcher("c")
 						.matches()
-				|| !Pattern.compile("\\p{blk=BasicLatin}").matcher("c")
-						.matches()
-				|| !Pattern.compile("\\p{block=BasicLatin}").matcher("c")
+				|| !new Pattern("\\p{block=BasicLatin}").matcher("c")
 						.matches()) failCount++;
-		Matcher common = Pattern.compile("\\p{script=Common}").matcher("");
-		Matcher unknown = Pattern.compile("\\p{IsUnknown}").matcher("");
+		Matcher common = new Pattern("\\p{script=Common}").matcher("");
+		Matcher unknown = new Pattern("\\p{IsUnknown}").matcher("");
 		Matcher lastSM = common;
 		Character.UnicodeScript lastScript = Character.UnicodeScript.of(0);
-		Matcher latin = Pattern.compile("\\p{block=basic_latin}").matcher("");
-		Matcher greek = Pattern.compile("\\p{InGreek}").matcher("");
+		Matcher latin = new Pattern("\\p{block=basic_latin}").matcher("");
+		Matcher greek = new Pattern("\\p{InGreek}").matcher("");
 		Matcher lastBM = latin;
 		Character.UnicodeBlock lastBlock = Character.UnicodeBlock.of(0);
 		for (int cp = 1; cp < Character.MAX_CODE_POINT; cp++) {
@@ -2855,9 +1670,9 @@ public class RegExTest {
 			String str = new String(Character.toChars(cp));
 			if (script == lastScript) {
 				m = lastSM;
-				m.reset(str);
+				m.setTarget(str);
 			} else {
-				m = Pattern.compile("\\p{Is" + script.name() + "}")
+				m = new Pattern("\\p{Is" + script.name() + "}")
 						.matcher(str);
 			}
 			if (!m.matches()) {
@@ -2865,7 +1680,7 @@ public class RegExTest {
 			}
 			Matcher other = (script == Character.UnicodeScript.COMMON) ? unknown
 					: common;
-			other.reset(str);
+			other.setTarget(str);
 			if (other.matches()) {
 				failCount++;
 			}
@@ -2879,9 +1694,9 @@ public class RegExTest {
 			}
 			if (block == lastBlock) {
 				m = lastBM;
-				m.reset(str);
+				m.setTarget(str);
 			} else {
-				m = Pattern.compile("\\p{block=" + block.toString() + "}")
+				m = new Pattern("\\p{block=" + block.toString() + "}")
 						.matcher(str);
 			}
 			if (!m.matches()) {
@@ -2889,7 +1704,7 @@ public class RegExTest {
 			}
 			other = (block == Character.UnicodeBlock.BASIC_LATIN) ? greek
 					: latin;
-			other.reset(str);
+			other.setTarget(str);
 			if (other.matches()) {
 				failCount++;
 			}

@@ -456,4 +456,7 @@ public class Pattern implements Serializable, REFlags {
 		}
 		throw new PatternSyntaxException("unknown flag: " + c);
 	}
+	public static boolean matches(String regex, String toMatch) {
+		return new Pattern(regex).matches(toMatch);
+	}
 }
