@@ -555,13 +555,13 @@ public class RegExTest {
 		Pattern pattern = Pattern.compile("b+");
 		if (pattern.toString() != "b+") failCount++;
 		Matcher matcher = pattern.matcher("aaabbbccc");
-		String matcherString = matcher.toString(); // unspecified
+		matcher.toString();
 		matcher.find();
-		matcherString = matcher.toString(); // unspecified
+		matcher.toString();
 		matcher.region(0, 3);
-		matcherString = matcher.toString(); // unspecified
+		matcher.toString();
 		matcher.reset();
-		matcherString = matcher.toString(); // unspecified
+		matcher.toString();
 		report("toString");
 	}
 	// This test is for 4808962
@@ -607,7 +607,7 @@ public class RegExTest {
 		check(pattern, "A...b", true);
 		check(pattern, "Axxxb", false);
 		flags |= Pattern.CANON_EQ;
-		Pattern p = Pattern.compile("testa\u030a", flags);
+		Pattern.compile("testa\u030a", flags);
 		check(pattern, "testa\u030a", false);
 		check(pattern, "test\u00e5", false);
 		// Supplementary character test
@@ -645,7 +645,7 @@ public class RegExTest {
 		check(pattern, toSupplementaries("axxxb"), false);
 		flags |= Pattern.CANON_EQ;
 		String t = toSupplementaries("test");
-		p = Pattern.compile(t + "a\u030a", flags);
+		Pattern.compile(t + "a\u030a", flags);
 		check(pattern, t + "a\u030a", false);
 		check(pattern, t + "\u00e5", false);
 		report("Literal pattern");
@@ -661,12 +661,12 @@ public class RegExTest {
 		String result = matcher.replaceAll(replaceTest);
 		if (!result.equals("zzzabczzz")) failCount++;
 		matcher.reset();
-		String literalReplacement = matcher.quoteReplacement(replaceTest);
+		String literalReplacement = Matcher.quoteReplacement(replaceTest);
 		result = matcher.replaceAll(literalReplacement);
 		if (!result.equals("zzz$0zzz")) failCount++;
 		matcher.reset();
 		replaceTest = "\\t$\\$";
-		literalReplacement = matcher.quoteReplacement(replaceTest);
+		literalReplacement = Matcher.quoteReplacement(replaceTest);
 		result = matcher.replaceAll(literalReplacement);
 		if (!result.equals("zzz\\t$\\$zzz")) failCount++;
 		// Supplementary character test
@@ -676,12 +676,12 @@ public class RegExTest {
 		result = matcher.replaceAll(replaceTest);
 		if (!result.equals(toSupplementaries("zzzabczzz"))) failCount++;
 		matcher.reset();
-		literalReplacement = matcher.quoteReplacement(replaceTest);
+		literalReplacement = Matcher.quoteReplacement(replaceTest);
 		result = matcher.replaceAll(literalReplacement);
 		if (!result.equals(toSupplementaries("zzz$0zzz"))) failCount++;
 		matcher.reset();
 		replaceTest = "\\t$\\$";
-		literalReplacement = matcher.quoteReplacement(replaceTest);
+		literalReplacement = Matcher.quoteReplacement(replaceTest);
 		result = matcher.replaceAll(literalReplacement);
 		if (!result.equals(toSupplementaries("zzz\\t$\\$zzz"))) failCount++;
 		report("Literal replacement");
@@ -1469,31 +1469,27 @@ public class RegExTest {
 	@Test
 	public void longPatternTest() throws Exception {
 		try {
-			Pattern pattern = Pattern
-					.compile("a 32-character-long pattern xxxx");
-			pattern = Pattern.compile("a 33-character-long pattern xxxxx");
-			pattern = Pattern.compile("a thirty four character long regex");
+			Pattern.compile("a 32-character-long pattern xxxx");
+			Pattern.compile("a 33-character-long pattern xxxxx");
+			Pattern.compile("a thirty four character long regex");
 			StringBuffer patternToBe = new StringBuffer(101);
 			for (int i = 0; i < 100; i++)
 				patternToBe.append((char) (97 + i % 26));
-			pattern = Pattern.compile(patternToBe.toString());
+			Pattern.compile(patternToBe.toString());
 		} catch (PatternSyntaxException e) {
 			failCount++;
 		}
 		// Supplementary character test
 		try {
-			Pattern pattern = Pattern
-					.compile(toSupplementaries("a 32-character-long pattern xxxx"));
-			pattern = Pattern
-					.compile(toSupplementaries("a 33-character-long pattern xxxxx"));
-			pattern = Pattern
-					.compile(toSupplementaries("a thirty four character long regex"));
+			Pattern.compile(toSupplementaries("a 32-character-long pattern xxxx"));
+			Pattern.compile(toSupplementaries("a 33-character-long pattern xxxxx"));
+			Pattern.compile(toSupplementaries("a thirty four character long regex"));
 			StringBuffer patternToBe = new StringBuffer(101 * 2);
 			for (int i = 0; i < 100; i++)
 				patternToBe.append(Character
 						.toChars(Character.MIN_SUPPLEMENTARY_CODE_POINT
 								+ 97 + i % 26));
-			pattern = Pattern.compile(patternToBe.toString());
+			Pattern.compile(patternToBe.toString());
 		} catch (PatternSyntaxException e) {
 			failCount++;
 		}
@@ -1716,7 +1712,7 @@ public class RegExTest {
 		Matcher matcher = pattern.matcher("xxxyyyzzz");
 		matcher.find();
 		try {
-			String blah = matcher.group(1);
+			matcher.group(1);
 			failCount++;
 		} catch (IndexOutOfBoundsException ioobe) {
 			// Good result
@@ -1726,7 +1722,7 @@ public class RegExTest {
 		matcher = pattern.matcher("xxxyyyzzz");
 		matcher.find();
 		try {
-			String blah = matcher.group(1);
+			matcher.group(1);
 			failCount++;
 		} catch (IndexOutOfBoundsException ioobe) {
 			// Good result
@@ -1737,7 +1733,7 @@ public class RegExTest {
 		matcher = pattern.matcher(toSupplementaries("xxxyyyzzz"));
 		matcher.find();
 		try {
-			String blah = matcher.group(1);
+			matcher.group(1);
 			failCount++;
 		} catch (IndexOutOfBoundsException ioobe) {
 			// Good result
@@ -1747,7 +1743,7 @@ public class RegExTest {
 		matcher = pattern.matcher(toSupplementaries("xxxyyyzzz"));
 		matcher.find();
 		try {
-			String blah = matcher.group(1);
+			matcher.group(1);
 			failCount++;
 		} catch (IndexOutOfBoundsException ioobe) {
 			// Good result
@@ -2419,7 +2415,6 @@ public class RegExTest {
 		report("Boyer Moore (Supplementary)");
 	}
 	private static void doBnM(int baseCharacter) throws Exception {
-		int achar = 0;
 		for (int i = 0; i < 100; i++) {
 			// Create a short pattern to search for
 			int patternLength = generator.nextInt(7) + 4;
@@ -2480,7 +2475,6 @@ public class RegExTest {
 	}
 	private static void doSlice(int maxCharacter) throws Exception {
 		Random generator = new Random();
-		int achar = 0;
 		for (int i = 0; i < 100; i++) {
 			// Create a short pattern to search for
 			int patternLength = generator.nextInt(7) + 4;
@@ -2559,9 +2553,7 @@ public class RegExTest {
 				fileName);
 		FileInputStream in = new FileInputStream(testCases);
 		BufferedReader r = new BufferedReader(new InputStreamReader(in));
-		// Process next test case.
-		String aLine;
-		while ((aLine = r.readLine()) != null) {
+		while ((r.readLine()) != null) {
 			// Read a line for pattern
 			String patternString = grabLine(r);
 			Pattern p = null;
