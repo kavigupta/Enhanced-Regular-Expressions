@@ -46,6 +46,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
+import org.junit.Test;
+
 /**
  * This is a test class created to check the operation of
  * the Pattern and Matcher classes.
@@ -57,81 +59,13 @@ public class RegExTest {
 	/**
 	 * Main to interpret arguments and run several tests.
 	 */
-	public static void main(String[] args) throws Exception {
+	@Test
+	public void main() throws Exception {
 		// Most of the tests are in a file
 		processFile("TestCases.txt");
 		// processFile("PerlCases.txt");
 		processFile("BMPTestCases.txt");
 		processFile("SupplementaryTestCases.txt");
-		// These test many randomly generated char patterns
-		bm();
-		slice();
-		// These are hard to put into the file
-		escapes();
-		blankInput();
-		// Substitition tests on randomly generated sequences
-		globalSubstitute();
-		stringbufferSubstitute();
-		substitutionBasher();
-		// Canonical Equivalence
-		ceTest();
-		// Anchors
-		anchorTest();
-		// boolean match calls
-		matchesTest();
-		lookingAtTest();
-		// Pattern API
-		patternMatchesTest();
-		// Misc
-		lookbehindTest();
-		nullArgumentTest();
-		backRefTest();
-		groupCaptureTest();
-		caretTest();
-		charClassTest();
-		emptyPatternTest();
-		findIntTest();
-		group0Test();
-		longPatternTest();
-		octalTest();
-		ampersandTest();
-		negationTest();
-		splitTest();
-		appendTest();
-		caseFoldingTest();
-		commentsTest();
-		unixLinesTest();
-		replaceFirstTest();
-		gTest();
-		zTest();
-		serializeTest();
-		reluctantRepetitionTest();
-		multilineDollarTest();
-		dollarAtEndTest();
-		caretBetweenTerminatorsTest();
-		// This RFE rejected in Tiger numOccurrencesTest();
-		javaCharClassTest();
-		nonCaptureRepetitionTest();
-		notCapturedGroupCurlyMatchTest();
-		escapedSegmentTest();
-		literalPatternTest();
-		literalReplacementTest();
-		regionTest();
-		toStringTest();
-		negatedCharClassTest();
-		findFromTest();
-		boundsTest();
-		unicodeWordBoundsTest();
-		caretAtEndTest();
-		wordSearchTest();
-		hitEndTest();
-		toMatchResultTest();
-		surrogatesInClassTest();
-		namedGroupCaptureTest();
-		nonBmpClassComplementTest();
-		unicodePropertiesTest();
-		unicodeHexNotationTest();
-		unicodeClassesTest();
 		if (failure)
 			throw new RuntimeException("Failure in the RE handling.");
 		else System.err.println("OKAY: All tests passed.");
@@ -237,7 +171,8 @@ public class RegExTest {
 			return true;
 		}
 	}
-	private static void nullArgumentTest() {
+	@Test
+	public void nullArgumentTest() {
 		check(new Runnable() {
 			@Override
 			public void run() {
@@ -317,7 +252,8 @@ public class RegExTest {
 	}
 	// This is for bug6635133
 	// Test if surrogate pair in Unicode escapes can be handled correctly.
-	private static void surrogatesInClassTest() throws Exception {
+	@Test
+	public void surrogatesInClassTest() throws Exception {
 		Pattern pattern = Pattern.compile("[\\ud834\\udd21-\\ud834\\udd24]");
 		Matcher matcher = pattern.matcher("\ud834\udd22");
 		if (!matcher.find()) failCount++;
@@ -325,7 +261,8 @@ public class RegExTest {
 	// This is for bug 4988891
 	// Test toMatchResult to see that it is a copy of the Matcher
 	// that is not affected by subsequent operations on the original
-	private static void toMatchResultTest() throws Exception {
+	@Test
+	public void toMatchResultTest() throws Exception {
 		Pattern pattern = Pattern.compile("squid");
 		Matcher matcher = pattern
 				.matcher("agiantsquidofdestinyasmallsquidoffate");
@@ -347,7 +284,8 @@ public class RegExTest {
 	}
 	// This is for bug 5013885
 	// Must test a slice to see if it reports hitEnd correctly
-	private static void hitEndTest() throws Exception {
+	@Test
+	public void hitEndTest() throws Exception {
 		// Basic test of Slice node
 		Pattern p = Pattern.compile("^squidattack");
 		Matcher m = p.matcher("squack");
@@ -382,7 +320,8 @@ public class RegExTest {
 	}
 	// This is for bug 4997476
 	// It is weird code submitted by customer demonstrating a regression
-	private static void wordSearchTest() throws Exception {
+	@Test
+	public void wordSearchTest() throws Exception {
 		String testString = new String("word1 word2 word3");
 		Pattern p = Pattern.compile("\\b");
 		Matcher m = p.matcher(testString);
@@ -403,7 +342,8 @@ public class RegExTest {
 		report("Customer word search");
 	}
 	// This is for bug 4994840
-	private static void caretAtEndTest() throws Exception {
+	@Test
+	public void caretAtEndTest() throws Exception {
 		// Problem only occurs with multiline patterns
 		// containing a beginning-of-line caret "^" followed
 		// by an expression that also matches the empty string.
@@ -416,7 +356,8 @@ public class RegExTest {
 	// This test is for 4979006
 	// Check to see if word boundary construct properly handles unicode
 	// non spacing marks
-	private static void unicodeWordBoundsTest() throws Exception {
+	@Test
+	public void unicodeWordBoundsTest() throws Exception {
 		String spaces = "  ";
 		String wordChar = "a";
 		String nsm = "\u030a";
@@ -469,7 +410,8 @@ public class RegExTest {
 		}
 		if (!Arrays.asList(expected).equals(result)) failCount++;
 	}
-	private static void lookbehindTest() throws Exception {
+	@Test
+	public void lookbehindTest() throws Exception {
 		// Positive
 		check("(?<=%.{0,5})foo\\d",
 				"%foo1\n%bar foo2\n%bar  foo3\n%blahblah foo4\nfoo5",
@@ -503,7 +445,8 @@ public class RegExTest {
 	// This test is for 4938995
 	// Check to see if weak region boundaries are transparent to
 	// lookahead and lookbehind constructs
-	private static void boundsTest() throws Exception {
+	@Test
+	public void boundsTest() throws Exception {
 		String fullMessage = "catdogcat";
 		Pattern pattern = Pattern.compile("(?<=cat)dog(?=cat)");
 		Matcher matcher = pattern.matcher("catdogca");
@@ -543,7 +486,8 @@ public class RegExTest {
 		report("Region bounds transparency");
 	}
 	// This test is for 4945394
-	private static void findFromTest() throws Exception {
+	@Test
+	public void findFromTest() throws Exception {
 		String message = "This is 40 $0 message.";
 		Pattern pat = Pattern.compile("\\$0");
 		Matcher match = pat.matcher(message);
@@ -553,7 +497,8 @@ public class RegExTest {
 		report("Check for alternating find");
 	}
 	// This test is for 4872664 and 4892980
-	private static void negatedCharClassTest() throws Exception {
+	@Test
+	public void negatedCharClassTest() throws Exception {
 		Pattern pattern = Pattern.compile("[^>]");
 		Matcher matcher = pattern.matcher("\u203A");
 		if (!matcher.matches()) failCount++;
@@ -597,7 +542,8 @@ public class RegExTest {
 		report("Negated Character Class");
 	}
 	// This test is for 4628291
-	private static void toStringTest() throws Exception {
+	@Test
+	public void toStringTest() throws Exception {
 		Pattern pattern = Pattern.compile("b+");
 		if (pattern.toString() != "b+") failCount++;
 		Matcher matcher = pattern.matcher("aaabbbccc");
@@ -611,7 +557,8 @@ public class RegExTest {
 		report("toString");
 	}
 	// This test is for 4808962
-	private static void literalPatternTest() throws Exception {
+	@Test
+	public void literalPatternTest() throws Exception {
 		int flags = Pattern.LITERAL;
 		Pattern pattern = Pattern.compile("abc\\t$^", flags);
 		check(pattern, "abc\\t$^", true);
@@ -697,7 +644,8 @@ public class RegExTest {
 	}
 	// This test is for 4803179
 	// This test is also for 4808962, replacement parts
-	private static void literalReplacementTest() throws Exception {
+	@Test
+	public void literalReplacementTest() throws Exception {
 		int flags = Pattern.LITERAL;
 		Pattern pattern = Pattern.compile("abc", flags);
 		Matcher matcher = pattern.matcher("zzzabczzz");
@@ -731,7 +679,8 @@ public class RegExTest {
 		report("Literal replacement");
 	}
 	// This test is for 4757029
-	private static void regionTest() throws Exception {
+	@Test
+	public void regionTest() throws Exception {
 		Pattern pattern = Pattern.compile("abc");
 		Matcher matcher = pattern.matcher("abcdefabc");
 		matcher.region(0, 9);
@@ -807,7 +756,8 @@ public class RegExTest {
 		}
 	}
 	// This test is for 4803197
-	private static void escapedSegmentTest() throws Exception {
+	@Test
+	public void escapedSegmentTest() throws Exception {
 		Pattern pattern = Pattern.compile("\\Qdir1\\dir2\\E");
 		check(pattern, "dir1\\dir2", true);
 		pattern = Pattern.compile("\\Qdir1\\dir2\\\\E");
@@ -826,7 +776,8 @@ public class RegExTest {
 		report("Escaped segment");
 	}
 	// This test is for 4792284
-	private static void nonCaptureRepetitionTest() throws Exception {
+	@Test
+	public void nonCaptureRepetitionTest() throws Exception {
 		String input = "abcdefgh;";
 		String[] patterns = new String[] { "(?:\\w{4})+;", "(?:\\w{8})*;",
 				"(?:\\w{2}){2,4};", "(?:\\w{4}){2,};", // only matches the
@@ -852,7 +803,8 @@ public class RegExTest {
 		report("Non capturing repetition");
 	}
 	// This test is for 6358731
-	private static void notCapturedGroupCurlyMatchTest() throws Exception {
+	@Test
+	public void notCapturedGroupCurlyMatchTest() throws Exception {
 		Pattern pattern = Pattern.compile("(abc)+|(abcd)+");
 		Matcher matcher = pattern.matcher("abcd");
 		if (!matcher.matches() || matcher.group(1) != null
@@ -862,7 +814,8 @@ public class RegExTest {
 		report("Not captured GroupCurly");
 	}
 	// This test is for 4706545
-	private static void javaCharClassTest() throws Exception {
+	@Test
+	public void javaCharClassTest() throws Exception {
 		for (int i = 0; i < 1000; i++) {
 			char c = (char) generator.nextInt();
 			check("{javaLowerCase}", c, Character.isLowerCase(c));
@@ -920,7 +873,7 @@ public class RegExTest {
 	}
 	// This test is for 4523620
 	/*
-	 * private static void numOccurrencesTest() throws Exception {
+	 * @Test public void numOccurrencesTest() throws Exception {
 	 * Pattern pattern = Pattern.compile("aaa");
 	 * 
 	 * if (pattern.numOccurrences("aaaaaa", false) != 2)
@@ -938,7 +891,8 @@ public class RegExTest {
 	 * }
 	 */
 	// This test is for 4776374
-	private static void caretBetweenTerminatorsTest() throws Exception {
+	@Test
+	public void caretBetweenTerminatorsTest() throws Exception {
 		int flags1 = Pattern.DOTALL;
 		int flags2 = Pattern.DOTALL | Pattern.UNIX_LINES;
 		int flags3 = Pattern.DOTALL | Pattern.UNIX_LINES | Pattern.MULTILINE;
@@ -986,7 +940,8 @@ public class RegExTest {
 		report("Caret between terminators");
 	}
 	// This test is for 4727935
-	private static void dollarAtEndTest() throws Exception {
+	@Test
+	public void dollarAtEndTest() throws Exception {
 		int flags1 = Pattern.DOTALL;
 		int flags2 = Pattern.DOTALL | Pattern.UNIX_LINES;
 		int flags3 = Pattern.DOTALL | Pattern.MULTILINE;
@@ -1023,7 +978,8 @@ public class RegExTest {
 		report("Dollar at End");
 	}
 	// This test is for 4711773
-	private static void multilineDollarTest() throws Exception {
+	@Test
+	public void multilineDollarTest() throws Exception {
 		Pattern findCR = Pattern.compile("$", Pattern.MULTILINE);
 		Matcher matcher = findCR.matcher("first bit\nsecond bit");
 		matcher.find();
@@ -1041,7 +997,8 @@ public class RegExTest {
 		if (matcher.start(0) != 20 * 2) failCount++;
 		report("Multiline Dollar");
 	}
-	private static void reluctantRepetitionTest() throws Exception {
+	@Test
+	public void reluctantRepetitionTest() throws Exception {
 		Pattern p = Pattern.compile("1(\\s\\S+?){1,3}?[\\s,]2");
 		check(p, "1 word word word 2", true);
 		check(p, "1 wor wo w 2", true);
@@ -1059,7 +1016,8 @@ public class RegExTest {
 		check(m, toSupplementaries("ababc"));
 		report("Reluctant Repetition");
 	}
-	private static void serializeTest() throws Exception {
+	@Test
+	public void serializeTest() throws Exception {
 		String patternStr = "(b)";
 		String matchStr = "b";
 		Pattern pattern = Pattern.compile(patternStr);
@@ -1076,7 +1034,8 @@ public class RegExTest {
 		if (matcher.groupCount() != 1) failCount++;
 		report("Serialization");
 	}
-	private static void gTest() {
+	@Test
+	public void gTest() {
 		Pattern pattern = Pattern.compile("\\G\\w");
 		Matcher matcher = pattern.matcher("abc#x#x");
 		matcher.find();
@@ -1094,7 +1053,8 @@ public class RegExTest {
 		if (matcher.find()) failCount++;
 		report("\\G");
 	}
-	private static void zTest() {
+	@Test
+	public void zTest() {
 		Pattern pattern = Pattern.compile("foo\\Z");
 		// Positives
 		check(pattern, "foo\u0085", true);
@@ -1117,7 +1077,8 @@ public class RegExTest {
 		check(pattern, "foo\u2029", false);
 		report("\\Z");
 	}
-	private static void replaceFirstTest() {
+	@Test
+	public void replaceFirstTest() {
 		Pattern pattern = Pattern.compile("(ab)(c*)");
 		Matcher matcher = pattern.matcher("abccczzzabcczzzabccc");
 		if (!matcher.replaceFirst("test").equals("testzzzabcczzzabccc"))
@@ -1164,7 +1125,8 @@ public class RegExTest {
 				toSupplementaries("zzztest"))) failCount++;
 		report("Replace First");
 	}
-	private static void unixLinesTest() {
+	@Test
+	public void unixLinesTest() {
 		Pattern pattern = Pattern.compile(".*");
 		Matcher matcher = pattern.matcher("aa\u2028blah");
 		matcher.find();
@@ -1193,7 +1155,8 @@ public class RegExTest {
 		check(matcher, toSupplementaries("a\u2028"), false);
 		report("Unix Lines");
 	}
-	private static void commentsTest() {
+	@Test
+	public void commentsTest() {
 		int flags = Pattern.COMMENTS;
 		Pattern pattern = Pattern.compile("aa \\# aa", flags);
 		Matcher matcher = pattern.matcher("aa#aa");
@@ -1250,7 +1213,8 @@ public class RegExTest {
 		if (!matcher.matches()) failCount++;
 		report("Comments");
 	}
-	private static void caseFoldingTest() { // bug 4504687
+	@Test
+	public void caseFoldingTest() { // bug 4504687
 		int flags = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
 		Pattern pattern = Pattern.compile("aa", flags);
 		Matcher matcher = pattern.matcher("ab");
@@ -1318,7 +1282,8 @@ public class RegExTest {
 		if (!pattern.matcher("\u0131\u0130").matches()) failCount++;
 		report("Case Folding");
 	}
-	private static void appendTest() {
+	@Test
+	public void appendTest() {
 		Pattern pattern = Pattern.compile("(ab)(cd)");
 		Matcher matcher = pattern.matcher("abcd");
 		String result = matcher.replaceAll("$2$1");
@@ -1367,7 +1332,8 @@ public class RegExTest {
 		}
 		report("Append");
 	}
-	private static void splitTest() {
+	@Test
+	public void splitTest() {
 		Pattern pattern = Pattern.compile(":");
 		String[] result = pattern.split("foo:and:boo", 2);
 		if (!result[0].equals("foo")) failCount++;
@@ -1438,7 +1404,8 @@ public class RegExTest {
 		if (!result[0].equals(source)) failCount++;
 		report("Split");
 	}
-	private static void negationTest() {
+	@Test
+	public void negationTest() {
 		Pattern pattern = Pattern.compile("[\\[@^]+");
 		Matcher matcher = pattern.matcher("@@@@[[[[^^^^");
 		if (!matcher.find()) failCount++;
@@ -1456,7 +1423,8 @@ public class RegExTest {
 		if (!matcher.find()) failCount++;
 		report("Negation");
 	}
-	private static void ampersandTest() {
+	@Test
+	public void ampersandTest() {
 		Pattern pattern = Pattern.compile("[&@]+");
 		check(pattern, "@@@@&&&&", true);
 		pattern = Pattern.compile("[@&]+");
@@ -1465,7 +1433,8 @@ public class RegExTest {
 		check(pattern, "@@@@&&&&", true);
 		report("Ampersand");
 	}
-	private static void octalTest() throws Exception {
+	@Test
+	public void octalTest() throws Exception {
 		Pattern pattern = Pattern.compile("\\u0007");
 		Matcher matcher = pattern.matcher("\u0007");
 		if (!matcher.matches()) failCount++;
@@ -1489,7 +1458,8 @@ public class RegExTest {
 		if (!matcher.matches()) failCount++;
 		report("Octal");
 	}
-	private static void longPatternTest() throws Exception {
+	@Test
+	public void longPatternTest() throws Exception {
 		try {
 			Pattern.compile("a 32-character-long pattern xxxx");
 			Pattern.compile("a 33-character-long pattern xxxxx");
@@ -1517,7 +1487,8 @@ public class RegExTest {
 		}
 		report("LongPattern");
 	}
-	private static void group0Test() throws Exception {
+	@Test
+	public void group0Test() throws Exception {
 		Pattern pattern = Pattern.compile("(tes)ting");
 		Matcher matcher = pattern.matcher("testing");
 		check(matcher, "testing");
@@ -1583,7 +1554,8 @@ public class RegExTest {
 		}
 		report("Group0");
 	}
-	private static void findIntTest() throws Exception {
+	@Test
+	public void findIntTest() throws Exception {
 		Pattern p = Pattern.compile("blah");
 		Matcher m = p.matcher("zzzzblahzzzzzblah");
 		boolean result = m.find(2);
@@ -1605,7 +1577,8 @@ public class RegExTest {
 		if (!result) failCount++;
 		report("FindInt");
 	}
-	private static void emptyPatternTest() throws Exception {
+	@Test
+	public void emptyPatternTest() throws Exception {
 		Pattern p = Pattern.compile("");
 		Matcher m = p.matcher("foo");
 		// Should find empty pattern at beginning of input
@@ -1632,7 +1605,8 @@ public class RegExTest {
 		if (result == true) failCount++;
 		report("EmptyPattern");
 	}
-	private static void charClassTest() throws Exception {
+	@Test
+	public void charClassTest() throws Exception {
 		Pattern pattern = Pattern.compile("blah[ab]]blech");
 		check(pattern, "blahb]blech", true);
 		pattern = Pattern.compile("[abc[def]]");
@@ -1670,7 +1644,8 @@ public class RegExTest {
 			failCount++;
 		report("CharClass");
 	}
-	private static void caretTest() throws Exception {
+	@Test
+	public void caretTest() throws Exception {
 		Pattern pattern = Pattern.compile("\\w*");
 		Matcher matcher = pattern.matcher("a#bc#def##g");
 		check(matcher, "a");
@@ -1722,7 +1697,8 @@ public class RegExTest {
 		if (!result.equals("Xthis is some text\n")) failCount++;
 		report("Caret");
 	}
-	private static void groupCaptureTest() throws Exception {
+	@Test
+	public void groupCaptureTest() throws Exception {
 		// Independent group
 		Pattern pattern = Pattern.compile("x+(?>y+)z+");
 		Matcher matcher = pattern.matcher("xxxyyyzzz");
@@ -1766,7 +1742,8 @@ public class RegExTest {
 		}
 		report("GroupCapture");
 	}
-	private static void backRefTest() throws Exception {
+	@Test
+	public void backRefTest() throws Exception {
 		Pattern pattern = Pattern.compile("(a*)bc\\1");
 		check(pattern, "zzzaabcazzz", true);
 		pattern = Pattern.compile("(a*)bc\\1");
@@ -1815,7 +1792,8 @@ public class RegExTest {
 	 * There is no empty line to be matched in the sequence
 	 * but there is an empty line in the sequence .
 	 */
-	private static void anchorTest() throws Exception {
+	@Test
+	public void anchorTest() throws Exception {
 		Pattern p = Pattern.compile("^.*$", Pattern.MULTILINE);
 		Matcher m = p.matcher("blah1\r\nblah2");
 		m.find();
@@ -1872,7 +1850,8 @@ public class RegExTest {
 	/**
 	 * A basic sanity test of Matcher.lookingAt().
 	 */
-	private static void lookingAtTest() throws Exception {
+	@Test
+	public void lookingAtTest() throws Exception {
 		Pattern p = Pattern.compile("(ab)(c*)");
 		Matcher m = p.matcher("abccczzzabcczzzabccc");
 		if (!m.lookingAt()) failCount++;
@@ -1891,7 +1870,8 @@ public class RegExTest {
 	/**
 	 * A basic sanity test of Matcher.matches().
 	 */
-	private static void matchesTest() throws Exception {
+	@Test
+	public void matchesTest() throws Exception {
 		// matches()
 		Pattern p = Pattern.compile("ulb(c*)");
 		Matcher m = p.matcher("ulbcccccc");
@@ -1926,7 +1906,8 @@ public class RegExTest {
 	/**
 	 * A basic sanity test of Pattern.matches().
 	 */
-	private static void patternMatchesTest() throws Exception {
+	@Test
+	public void patternMatchesTest() throws Exception {
 		// matches()
 		if (!Pattern.matches(toSupplementaries("ulb(c*)"),
 				toSupplementaries("ulbcccccc"))) failCount++;
@@ -1953,7 +1934,8 @@ public class RegExTest {
 	 * to match sequences that are not explicitly specified in the
 	 * pattern when they are considered equivalent by the Unicode Standard.
 	 */
-	private static void ceTest() throws Exception {
+	@Test
+	public void ceTest() throws Exception {
 		// Decomposed char outside char classes
 		Pattern p = Pattern.compile("testa\u030a", Pattern.CANON_EQ);
 		Matcher m = p.matcher("test\u00e5");
@@ -2045,7 +2027,8 @@ public class RegExTest {
 	/**
 	 * A basic sanity test of Matcher.replaceAll().
 	 */
-	private static void globalSubstitute() throws Exception {
+	@Test
+	public void globalSubstitute() throws Exception {
 		// Global substitution with a literal
 		Pattern p = Pattern.compile("(ab)(c*)");
 		Matcher m = p.matcher("abccczzzabcczzzabccc");
@@ -2078,7 +2061,8 @@ public class RegExTest {
 	 * Tests the usage of Matcher.appendReplacement() with literal
 	 * and group substitutions.
 	 */
-	private static void stringbufferSubstitute() throws Exception {
+	@Test
+	public void stringbufferSubstitute() throws Exception {
 		// SB substitution with literal
 		String blah = "zzzblahzzz";
 		Pattern p = Pattern.compile("blah");
@@ -2314,7 +2298,8 @@ public class RegExTest {
 	 * random group + random string + random group.
 	 * The results are checked for correctness.
 	 */
-	private static void substitutionBasher() {
+	@Test
+	public void substitutionBasher() {
 		for (int runs = 0; runs < 1000; runs++) {
 			// Create a base string to work in
 			int leadingChars = generator.nextInt(10);
@@ -2383,7 +2368,8 @@ public class RegExTest {
 	 * not in the file because the escapes should be be processed
 	 * by the Pattern class when the regex is compiled.
 	 */
-	private static void escapes() throws Exception {
+	@Test
+	public void escapes() throws Exception {
 		Pattern p = Pattern.compile("\\043");
 		Matcher m = p.matcher("#");
 		if (!m.find()) failCount++;
@@ -2399,7 +2385,8 @@ public class RegExTest {
 	 * Checks the handling of blank input situations. These
 	 * tests are incompatible with my test file format.
 	 */
-	private static void blankInput() throws Exception {
+	@Test
+	public void blankInput() throws Exception {
 		Pattern p = Pattern.compile("abc", Pattern.CASE_INSENSITIVE);
 		Matcher m = p.matcher("");
 		if (m.find()) failCount++;
@@ -2418,7 +2405,8 @@ public class RegExTest {
 	 * Tests the Boyer-Moore pattern matching of a character sequence
 	 * on randomly generated patterns.
 	 */
-	private static void bm() throws Exception {
+	@Test
+	public void bm() throws Exception {
 		doBnM('a');
 		report("Boyer Moore (ASCII)");
 		doBnM(Character.MIN_SUPPLEMENTARY_CODE_POINT - 10);
@@ -2477,7 +2465,8 @@ public class RegExTest {
 	 * The Boyer-Moore optimization is not done on these patterns
 	 * because it uses unicode case folding.
 	 */
-	private static void slice() throws Exception {
+	@Test
+	public void slice() throws Exception {
 		doSlice(Character.MAX_VALUE);
 		report("Slice");
 		doSlice(Character.MAX_CODE_POINT);
@@ -2730,7 +2719,8 @@ public class RegExTest {
 		}
 		failCount++;
 	}
-	private static void namedGroupCaptureTest() throws Exception {
+	@Test
+	public void namedGroupCaptureTest() throws Exception {
 		check(Pattern.compile("x+(?<gname>y+)z+"), "xxxyyyzzz", "gname",
 				"yyy");
 		check(Pattern.compile("x+(?<gname8>y+)z+"), "xxxyyyzzz", "gname8",
@@ -2812,7 +2802,8 @@ public class RegExTest {
 		report("NamedGroupCapture");
 	}
 	// This is for bug 6969132
-	private static void nonBmpClassComplementTest() throws Exception {
+	@Test
+	public void nonBmpClassComplementTest() throws Exception {
 		Pattern p = Pattern.compile("\\P{Lu}");
 		Matcher m = p.matcher(new String(new int[] { 0x1d400 }, 0, 1));
 		if (m.find() && m.start() == 1) failCount++;
@@ -2827,7 +2818,8 @@ public class RegExTest {
 		if (m.find() && m.start() == 1) failCount++;
 		report("NonBmpClassComplement");
 	}
-	private static void unicodePropertiesTest() throws Exception {
+	@Test
+	public void unicodePropertiesTest() throws Exception {
 		// different forms
 		if (!Pattern.compile("\\p{IsLu}").matcher("A").matches()
 				|| !Pattern.compile("\\p{Lu}").matcher("A").matches()
@@ -2905,7 +2897,8 @@ public class RegExTest {
 		}
 		report("unicodeProperties");
 	}
-	private static void unicodeHexNotationTest() throws Exception {
+	@Test
+	public void unicodeHexNotationTest() throws Exception {
 		// negative
 		checkExpectedFail("\\x{-23}");
 		checkExpectedFail("\\x{110000}");
@@ -2938,7 +2931,8 @@ public class RegExTest {
 		}
 		report("unicodeHexNotation");
 	}
-	private static void unicodeClassesTest() throws Exception {
+	@Test
+	public void unicodeClassesTest() throws Exception {
 		Matcher lower = Pattern.compile("\\p{Lower}").matcher("");
 		Matcher upper = Pattern.compile("\\p{Upper}").matcher("");
 		Pattern.compile("\\p{ASCII}").matcher("");

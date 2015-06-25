@@ -1024,7 +1024,7 @@ public final class Matcher implements MatchResult {
 	 *
 	 * @return <tt>true</tt> iff this matcher is using transparent bounds,
 	 *         <tt>false</tt> otherwise.
-	 * @see openjdk.regex.Matcher#useTransparentBounds(boolean)
+	 * @see java.util.regex.Matcher#useTransparentBounds(boolean)
 	 * @since 1.5
 	 */
 	public boolean hasTransparentBounds() {
@@ -1052,7 +1052,7 @@ public final class Matcher implements MatchResult {
 	 * @param b a boolean indicating whether to use opaque or transparent
 	 *        regions
 	 * @return this matcher
-	 * @see openjdk.regex.Matcher#hasTransparentBounds
+	 * @see java.util.regex.Matcher#hasTransparentBounds
 	 * @since 1.5
 	 */
 	public Matcher useTransparentBounds(boolean b) {
@@ -1072,7 +1072,7 @@ public final class Matcher implements MatchResult {
 	 *
 	 * @return <tt>true</tt> iff this matcher is using anchoring bounds,
 	 *         <tt>false</tt> otherwise.
-	 * @see openjdk.regex.Matcher#useAnchoringBounds(boolean)
+	 * @see java.util.regex.Matcher#useAnchoringBounds(boolean)
 	 * @since 1.5
 	 */
 	public boolean hasAnchoringBounds() {
@@ -1095,7 +1095,7 @@ public final class Matcher implements MatchResult {
 	 *
 	 * @param b a boolean indicating whether or not to use anchoring bounds.
 	 * @return this matcher
-	 * @see openjdk.regex.Matcher#hasAnchoringBounds
+	 * @see java.util.regex.Matcher#hasAnchoringBounds
 	 * @since 1.5
 	 */
 	public Matcher useAnchoringBounds(boolean b) {
