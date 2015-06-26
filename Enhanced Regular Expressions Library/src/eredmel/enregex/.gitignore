@@ -1,3 +1,6 @@
 /EnregexPattern.class
 /EnregexType.class
 /SymbolPair.class
+/EREMatch.class
+/ERESegment.class
+/EREMetadata.class

@@ -1,6 +1,6 @@
-package enregex.matcher;
+package eredmel.enregex;
 
-import java.util.regex.Matcher;
+import openjdk.regex.Matcher;
 
 public class EREMatch {
 	private Matcher mat;

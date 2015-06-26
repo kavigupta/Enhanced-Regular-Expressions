@@ -2,8 +2,8 @@ package eredmel.test.enregex;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import enregex.matcher.EREMatch;
 import enregex.matcher.EREMatcher;
+import eredmel.enregex.EREMatch;
 
 public class ERETestUtil {
 	public static void assertMatch(String enregex, String text,

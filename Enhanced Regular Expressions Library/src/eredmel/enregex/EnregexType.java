@@ -5,7 +5,8 @@ import java.util.List;
 import openjdk.regex.Pattern;
 
 public class EnregexType {
-	private static final String TILDE_PAREN = "(?<!\\\\\\\\)(\\\\\\\\\\\\\\\\)*(?<tilde>~((?<parenopen><)|(?<parenclose>>)%s))";
+	private static final String TILDE_PAREN = "(?<!\\\\\\\\)(\\\\\\\\\\\\\\\\)*"
+			+ "(?<tilde>~((?<parenopen><)|(?<parenclose>>)|(?<quotout>^)%s))";
 	public final List<SymbolPair> parens;
 	public final List<SymbolPair> quotes;
 	public final Pattern tildeMatcher;
@@ -20,7 +21,7 @@ public class EnregexType {
 			SymbolPair pair = quotes.get(i);
 			quoteGroups.append("|(?<quotin").append(i).append(">")
 					.append(openRegex(pair)).append(")");
-			quoteGroups.append("|(?<quotout").append(i).append(">")
+			quoteGroups.append("|(?<quotin").append(i).append(">")
 					.append(closeRegex(pair)).append(")");
 		}
 		return Pattern.compile(String.format(TILDE_PAREN, quoteGroups));

@@ -5,6 +5,8 @@ import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import eredmel.enregex.EREMatch;
+
 public class EREMatcher {
 	private Pattern regex;
 	private ArrayList<EREBracket> matches;
