@@ -1237,7 +1237,7 @@ public final class Pattern implements java.io.Serializable {
 	 *
 	 * @serial
 	 */
-	private String pattern;
+	private final String pattern;
 	/**
 	 * The original pattern flags.
 	 *
@@ -1376,8 +1376,7 @@ public final class Pattern implements java.io.Serializable {
 				if (!compiled) compile();
 			}
 		}
-		Matcher m = new Matcher(this, input);
-		return m;
+		return new Matcher(this, input);
 	}
 	/**
 	 * Returns this pattern's match flags.
@@ -1419,9 +1418,7 @@ public final class Pattern implements java.io.Serializable {
 	 *         If the expression's syntax is invalid
 	 */
 	public static boolean matches(String regex, CharSequence input) {
-		Pattern p = Pattern.compile(regex);
-		Matcher m = p.matcher(input);
-		return m.matches();
+		return Pattern.compile(regex).matcher(input).matches();
 	}
 	/**
 	 * Splits the given input sequence around matches of this pattern.
@@ -1504,25 +1501,24 @@ public final class Pattern implements java.io.Serializable {
 		ArrayList<String> matchList = new ArrayList<>();
 		Matcher m = matcher(input);
 		// Add segments before each match found
-		while (m.find()) {
-			if (!matchLimited || matchList.size() < limit - 1) {
-				if (index == 0 && index == m.start()
-						&& m.start() == m.end()) {
-					// no empty leading substring included for zero-width
-					// match
-					// at the beginning of the input char sequence.
-					continue;
-				}
-				String match = input.subSequence(index, m.start())
-						.toString();
-				matchList.add(match);
-				index = m.end();
-			} else if (matchList.size() == limit - 1) { // last one
+		while (m.find() && (!matchLimited || matchList.size() < limit)) {
+			if (matchList.size() == limit - 1) {
+				// last one
 				String match = input.subSequence(index, input.length())
 						.toString();
 				matchList.add(match);
 				index = m.end();
+				break;
 			}
+			if (index == 0 && index == m.start() && m.start() == m.end()) {
+				// no empty leading substring included for zero-width
+				// match
+				// at the beginning of the input char sequence.
+				continue;
+			}
+			String match = input.subSequence(index, m.start()).toString();
+			matchList.add(match);
+			index = m.end();
 		}
 		// If no match was found, return this
 		if (index == 0) return new String[] { input.toString() };
