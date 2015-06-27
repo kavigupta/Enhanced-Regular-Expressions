@@ -2,20 +2,24 @@ package eredmel.test.enregex;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import enregex.matcher.EREMatcher;
+
+import java.util.ArrayList;
+
 import eredmel.enregex.EREMatch;
+import eredmel.enregex.EnregexPattern;
+import eredmel.enregex.EnregexType;
 
 public class ERETestUtil {
 	public static void assertMatch(String enregex, String text,
 			int[][] startends) {
-		assertMatch(new EREMatcher(enregex, text), startends);
-	}
-	public static void assertMatch(EREMatcher mat, int[][] startends) {
-		for (int i = 0; i < startends.length; i++) {
-			EREMatch match = mat.find();
-			assertArrayEquals(startends[i],
-					new int[] { match.start(), match.end() });
+		int i = 0;
+		ArrayList<EREMatch> matches = EnregexPattern.getInstance(enregex,
+				EnregexType.EREDMEL).process(text);
+		for (EREMatch m : matches) {
+			assertArrayEquals(i + "th element", startends[i],
+					new int[] { m.start(), m.end() });
+			i++;
 		}
-		assertEquals(null, mat.find());
+		assertEquals("Match Count", startends.length, i);
 	}
 }

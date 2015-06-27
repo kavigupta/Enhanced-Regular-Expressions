@@ -1,5 +1,7 @@
 package eredmel.enregex;
 
+import java.util.Arrays;
+
 public class EREMetadata {
 	private final EnregexType type;
 	private final int[] parencounts;
@@ -22,7 +24,7 @@ public class EREMetadata {
 		for (int i = 0; i < type.parens.size(); i++) {
 			SymbolPair pair = type.parens.get(i);
 			if (pair.openMatches(next, slashcount)) return openParen(i);
-			if (pair.openMatches(next, slashcount)) return closeParen(i);
+			if (pair.closeMatches(next, slashcount)) return closeParen(i);
 		}
 		return this;
 	}
@@ -64,5 +66,9 @@ public class EREMetadata {
 	}
 	public boolean quoteTypeMatches(int quoteType) {
 		return this.quoteType == quoteType;
+	}
+	@Override
+	public String toString() {
+		return "[" + Arrays.toString(parencounts) + "," + quoteType + "]";
 	}
 }

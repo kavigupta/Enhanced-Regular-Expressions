@@ -1,10 +1,14 @@
 package eredmel.enregex;
 
+import java.util.Arrays;
 import java.util.List;
 
 import openjdk.regex.Pattern;
 
 public class EnregexType {
+	public static final EnregexType EREDMEL = new EnregexType(
+			Arrays.asList(new SymbolPair('(', ')', false, false)),
+			Arrays.asList(new SymbolPair('\'', '\'', false, true)));
 	private static final String TILDE_PAREN = "(?<!\\\\\\\\)(\\\\\\\\\\\\\\\\)*"
 			+ "(?<tilde>~((?<parenopen><)|(?<parenclose>>)|(?<quotout>^)%s))";
 	public final List<SymbolPair> parens;
@@ -21,7 +25,7 @@ public class EnregexType {
 			SymbolPair pair = quotes.get(i);
 			quoteGroups.append("|(?<quotin").append(i).append(">")
 					.append(openRegex(pair)).append(")");
-			quoteGroups.append("|(?<quotin").append(i).append(">")
+			quoteGroups.append("|(?<quotout").append(i).append(">")
 					.append(closeRegex(pair)).append(")");
 		}
 		return Pattern.compile(String.format(TILDE_PAREN, quoteGroups));

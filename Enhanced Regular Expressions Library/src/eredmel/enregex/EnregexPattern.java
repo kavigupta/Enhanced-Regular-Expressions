@@ -1,5 +1,6 @@
 package eredmel.enregex;
 
+import java.util.ArrayList;
 import java.util.Stack;
 import java.util.function.Function;
 
@@ -49,7 +50,7 @@ public class EnregexPattern {
 			repl.append(enregex.substring(end, mat.start("tilde")));
 			if (mat.group("parenopen") != null) {
 				opens.add(parencount);
-				repl.append(groupNameOpenParen(parencount));
+				repl.append(group(groupNameOpenParen(parencount)));
 				parencount++;
 				continue tildeMatch;
 			}
@@ -59,22 +60,22 @@ public class EnregexPattern {
 							"This tilde parenthesis has no matching open",
 							enregex, mat.start("parenclose"));
 				int openmatch = opens.pop();
-				repl.append(groupNameCloseParen(openmatch));
+				repl.append(group(groupNameCloseParen(openmatch)));
 				continue tildeMatch;
 			}
 			if (mat.group("quotout") != null) {
 				generaloutcount++;
-				repl.append(groupNameGeneralOut(generaloutcount));
+				repl.append(group(groupNameGeneralOut(generaloutcount)));
 				continue tildeMatch;
 			}
 			for (int i = 0; i < type.quotes.size(); i++) {
 				if (mat.group("quotin" + i) != null) {
-					repl.append(groupNameInQuot(i, quoteincount[i]));
+					repl.append(group(groupNameInQuot(i, quoteincount[i])));
 					quoteincount[i]++;
 					continue tildeMatch;
 				}
 				if (mat.group("quotout" + i) != null) {
-					repl.append(groupNameOutQuot(i, quoteoutcount[i]));
+					repl.append(group(groupNameOutQuot(i, quoteoutcount[i])));
 					quoteoutcount[i]++;
 					continue tildeMatch;
 				}
@@ -85,38 +86,54 @@ public class EnregexPattern {
 					"This tilde parenthesis has no matching open",
 					enregex, opens.pop());
 		repl.append(enregex.substring(end));
-		return new EnregexPattern(Pattern.compile(repl.toString()),
+		return new EnregexPattern(Pattern.compile(repl.toString()), type,
 				parencount, quoteincount, quoteoutcount, generaloutcount);
 	}
 	private final Pattern regex;
+	private final EnregexType type;
 	private final int parencount;
 	private final int[] quotInCount, quotOutCount;
 	private final int generalOutCount;
-	public EnregexPattern(Pattern regex, int parencount, int[] quotInCount,
-			int[] quotOutCount, int generalOutCount) {
+	public EnregexPattern(Pattern regex, EnregexType type, int parencount,
+			int[] quotInCount, int[] quotOutCount, int generalOutCount) {
 		this.regex = regex;
+		this.type = type;
 		this.parencount = parencount;
 		this.quotInCount = quotInCount;
 		this.quotOutCount = quotOutCount;
 		this.generalOutCount = generalOutCount;
 	}
-	public String process(int offset, ERESegment segment,
-			Function<EREMatch, String> matchConsumer) {
-		Matcher mat = regex.matcher(segment);
-		if (!mat.find()) return segment.toString();
-		if (!actualMatch(mat, segment)) {
-			String str = segment.toString();
-			return str.substring(0, mat.start())
-					+ process(offset + mat.start(), segment.subSequence(
-							mat.start(), mat.end() - 1), matchConsumer)
-					+ str.substring(mat.end() - 1);
+	public String process(String str, Function<EREMatch, String> matchConsumer) {
+		int end = 0;
+		StringBuffer buff = new StringBuffer();
+		for (EREMatch match : process(str)) {
+			buff.append(str.substring(end, match.start()));
+			buff.append(matchConsumer.apply(match));
 		}
-		String str = segment.toString();
-		return str.substring(0, mat.start())
-				+ matchConsumer.apply(new EREMatch(offset, mat))
-				+ process(offset + mat.end(),
-						segment.subSequence(mat.end(), segment.length()),
-						matchConsumer);
+		return buff.append(str.substring(end)).toString();
+	}
+	public ArrayList<EREMatch> process(String str) {
+		ERESegment segment = ERESegment.getInstance(str, type);
+		ArrayList<EREMatch> matches = new ArrayList<EREMatch>();
+		int end = 0;
+		while (end >= 0) {
+			end = process(end, segment.subSequence(end, segment.length()),
+					matches);
+		}
+		return matches;
+	}
+	private int process(int offset, ERESegment segment,
+			ArrayList<EREMatch> matches) {
+		System.out.println(offset + "\t" + segment);
+		Matcher mat = regex.matcher(segment);
+		if (!mat.find()) return -1;
+		if (actualMatch(mat, segment)) {
+			matches.add(new EREMatch(offset, mat));
+			return mat.end() + offset;
+		}
+		return process(offset + mat.start(),
+				segment.subSequence(mat.start(), segment.length() - 1),
+				matches);
 	}
 	private boolean actualMatch(Matcher mat, ERESegment segment) {
 		for (int i = 0; i < parencount; i++) {
@@ -124,8 +141,10 @@ public class EnregexPattern {
 			int closeloc = mat.start(groupNameCloseParen(i));
 			if (openloc == -1 && closeloc == -1) continue;
 			if (openloc == -1 || closeloc == -1) return false;
+			System.out.println("Paseed starting");
 			if (!segment.parensMatch(openloc, closeloc)) return false;
 		}
+		System.out.println("Passed Paren Test");
 		for (int quoteType = 0; quoteType < quotInCount.length; quoteType++) {
 			for (int i = 0; i < quotInCount[quoteType]; i++) {
 				int loc = mat.start(groupNameInQuot(quoteType, i));
@@ -147,6 +166,9 @@ public class EnregexPattern {
 			if (!segment.quoteTypeMatches(loc, -1)) return false;
 		}
 		return true;
+	}
+	private static String group(String name) {
+		return "(?<" + name + ">)";
 	}
 	private static String groupNameOpenParen(int count) {
 		return "EREINTuOPARENu" + count;

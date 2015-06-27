@@ -15,24 +15,24 @@ public class ERETest {
 	}
 	@Test
 	public void singleNestTest() {
-		ERETestUtil.assertMatch("\\(@.+#\\)", "(a b c) (d e f)", new int[][] {
-				{ 0, 7 }, { 8, 15 } });
-		ERETestUtil.assertMatch("\\(@.+#\\)", "(a b c') ('d e f)",
+		ERETestUtil.assertMatch("\\(~<.+~>\\)", "(a b c) (d e f)",
+				new int[][] { { 0, 7 }, { 8, 15 } });
+		ERETestUtil.assertMatch("\\(~<.+~>\\)", "(a b c') ('d e f)",
 				new int[][] { { 0, 17 } });
 	}
 	@Test
 	public void multiNestTest() {
-		ERETestUtil.assertMatch("\\(@.+#\\)", "(a b c() ()d e f)",
+		ERETestUtil.assertMatch("\\(~<.+~>\\)", "(a b c() ()d e f)",
 				new int[][] { { 0, 17 } });
-		ERETestUtil.assertMatch("\\(@.+#\\)", "(()(())) (()(()))",
+		ERETestUtil.assertMatch("\\(~<.+~>\\)", "(()(())) (()(()))",
 				new int[][] { { 0, 8 }, { 9, 17 } });
-		ERETestUtil.assertMatch("\\(@.+#\\)", "()()", new int[][] {});
+		ERETestUtil.assertMatch("\\(~<.+~>\\)", "()()", new int[][] {});
 	}
 	@Test
 	public void argTest() {
-		ERETestUtil.assertMatch("\\(@.*#,@.*#\\)", "((),()) (,)",
+		ERETestUtil.assertMatch("\\(~<.*~>,~<.*~>\\)", "((),()) (,)",
 				new int[][] { { 0, 7 }, { 8, 11 } });
-		ERETestUtil.assertMatch("\\(@.*#,@.*#\\)", "((),()) (,)",
+		ERETestUtil.assertMatch("\\(~<.*~>,~<.*~>\\)", "((),()) (,)",
 				new int[][] { { 0, 7 }, { 8, 11 } });
 	}
 }

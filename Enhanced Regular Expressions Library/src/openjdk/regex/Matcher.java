@@ -25,7 +25,6 @@
 package openjdk.regex;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Objects;
 import java.util.TreeSet;
 
@@ -322,7 +321,6 @@ public final class Matcher implements MatchResult {
 		return range(group, iterations(group) - 1);
 	}
 	public int iterations(int group) {
-		System.out.println(Arrays.toString(groupsr));
 		return groupsr[group].size();
 	}
 	public int iterations(String group) {
@@ -617,7 +615,8 @@ public final class Matcher implements MatchResult {
 	 * character not matched by this match.
 	 * </p>
 	 *
-	 * @param start the index to start searching for a match
+	 * @param start
+	 *        the index to start searching for a match
 	 * @throws IndexOutOfBoundsException
 	 *         If start is less than zero or if start is greater than the
 	 *         length of the input sequence.
@@ -660,7 +659,8 @@ public final class Matcher implements MatchResult {
 	 * in <code>s</code> treated as a literal sequence. Slashes ('\') and
 	 * dollar signs ('$') will be given no special meaning.
 	 *
-	 * @param s The string to be literalized
+	 * @param s
+	 *        The string to be literalized
 	 * @return A literal string replacement
 	 * @since 1.5
 	 */
@@ -1067,7 +1067,8 @@ public final class Matcher implements MatchResult {
 	 * <p>
 	 * By default, a matcher uses opaque bounds.
 	 *
-	 * @param b a boolean indicating whether to use opaque or transparent
+	 * @param b
+	 *        a boolean indicating whether to use opaque or transparent
 	 *        regions
 	 * @return this matcher
 	 * @see java.util.regex.Matcher#hasTransparentBounds
@@ -1111,7 +1112,8 @@ public final class Matcher implements MatchResult {
 	 * <p>
 	 * By default, a matcher uses anchoring region boundaries.
 	 *
-	 * @param b a boolean indicating whether or not to use anchoring bounds.
+	 * @param b
+	 *        a boolean indicating whether or not to use anchoring bounds.
 	 * @return this matcher
 	 * @see java.util.regex.Matcher#hasAnchoringBounds
 	 * @since 1.5
@@ -1234,8 +1236,10 @@ public final class Matcher implements MatchResult {
 	/**
 	 * Generates a String from this Matcher's input in the specified range.
 	 *
-	 * @param beginIndex the beginning index, inclusive
-	 * @param endIndex the ending index, exclusive
+	 * @param beginIndex
+	 *        the beginning index, inclusive
+	 * @param endIndex
+	 *        the ending index, exclusive
 	 * @return A String generated from this Matcher's input
 	 */
 	CharSequence getSubSequence(int beginIndex, int endIndex) {
@@ -1274,5 +1278,8 @@ public final class Matcher implements MatchResult {
 		groupsr[0] = zero;
 		for (int i = 1; i < groupsr.length; i++)
 			groupsr[i] = new ArrayList<>(new TreeSet<>(groupsr[i]));
+	}
+	public MatchCache permanantResult() {
+		return new MatchCache(this);
 	}
 }

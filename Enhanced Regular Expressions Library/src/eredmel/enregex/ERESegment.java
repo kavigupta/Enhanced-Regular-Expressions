@@ -2,7 +2,7 @@ package eredmel.enregex;
 
 public class ERESegment implements CharSequence {
 	private final String backing;
-	private final EREMetadata[] metadata;
+	final EREMetadata[] metadata;
 	private final int start, end;
 	private ERESegment(String backing, EREMetadata[] metadata, int start,
 			int end) {
@@ -20,19 +20,23 @@ public class ERESegment implements CharSequence {
 		return new ERESegment(str, metadata, 0, str.length());
 	}
 	public boolean parensMatch(int i, int j) {
-		if (!metadata[i].equalParenState(metadata[j])) return false;
+		if (!metadataAt(i).equalParenState(metadataAt(j))) return false;
+		System.out.println("Equal Paren State");
 		for (int k = i + 1; k < j; k++) {
-			if (!metadata[k].greaterOrEqualParenState(metadata[i]))
+			if (!metadataAt(k).greaterOrEqualParenState(metadataAt(i)))
 				return false;
 		}
 		return true;
 	}
 	public boolean quoteTypeMatches(int loc, int quoteType) {
-		return metadata[loc].quoteTypeMatches(quoteType);
+		return metadataAt(loc).quoteTypeMatches(quoteType);
 	}
 	@Override
 	public char charAt(int index) {
 		return backing.charAt(index + start);
+	}
+	public EREMetadata metadataAt(int index) {
+		return metadata[index + start];
 	}
 	@Override
 	public int length() {
@@ -40,10 +44,11 @@ public class ERESegment implements CharSequence {
 	}
 	@Override
 	public ERESegment subSequence(int start, int end) {
-		return new ERESegment(backing, metadata, start + start, start + end);
+		return new ERESegment(backing, metadata, this.start + start,
+				this.start + end);
 	}
 	@Override
 	public String toString() {
-		return backing;
+		return backing.substring(start, end);
 	}
 }
