@@ -1,23 +1,23 @@
 package eredmel.enregex;
 
-public class ERESegment implements CharSequence {
+public class EnregexSegment implements CharSequence {
 	private final String backing;
-	final EREMetadata[] metadata;
+	final EnregexMatcher[] metadata;
 	private final int start, end;
-	private ERESegment(String backing, EREMetadata[] metadata, int start,
+	private EnregexSegment(String backing, EnregexMatcher[] metadata, int start,
 			int end) {
 		this.backing = backing;
 		this.metadata = metadata;
 		this.start = start;
 		this.end = end;
 	}
-	public static ERESegment getInstance(String str, EnregexType type) {
-		EREMetadata[] metadata = new EREMetadata[str.length() + 1];
-		metadata[0] = EREMetadata.startOfString(type);
+	public static EnregexSegment getInstance(String str, EnregexType type) {
+		EnregexMatcher[] metadata = new EnregexMatcher[str.length() + 1];
+		metadata[0] = EnregexMatcher.startOfString(type);
 		for (int i = 1; i < metadata.length; i++) {
 			metadata[i] = metadata[i - 1].next(str.charAt(i - 1));
 		}
-		return new ERESegment(str, metadata, 0, str.length());
+		return new EnregexSegment(str, metadata, 0, str.length());
 	}
 	public boolean parensMatch(int i, int j) {
 		if (!metadataAt(i).equalParenState(metadataAt(j))) return false;
@@ -35,7 +35,7 @@ public class ERESegment implements CharSequence {
 	public char charAt(int index) {
 		return backing.charAt(index + start);
 	}
-	public EREMetadata metadataAt(int index) {
+	public EnregexMatcher metadataAt(int index) {
 		return metadata[index + start];
 	}
 	@Override
@@ -43,8 +43,8 @@ public class ERESegment implements CharSequence {
 		return end - start;
 	}
 	@Override
-	public ERESegment subSequence(int start, int end) {
-		return new ERESegment(backing, metadata, this.start + start,
+	public EnregexSegment subSequence(int start, int end) {
+		return new EnregexSegment(backing, metadata, this.start + start,
 				this.start + end);
 	}
 	@Override

@@ -3,10 +3,10 @@ package eredmel.enregex;
 import openjdk.regex.MatchCache;
 import openjdk.regex.Matcher;
 
-public class EREMatch {
+public class EnregexMatch {
 	private MatchCache mat;
 	private int offset;
-	public EREMatch(int offset, Matcher mat) {
+	public EnregexMatch(int offset, Matcher mat) {
 		this.offset = offset;
 		this.mat = mat.permanantResult();
 	}
@@ -50,7 +50,7 @@ public class EREMatch {
 		if (this == obj) return true;
 		if (obj == null) return false;
 		if (getClass() != obj.getClass()) return false;
-		EREMatch other = (EREMatch) obj;
+		EnregexMatch other = (EnregexMatch) obj;
 		if (mat == null) {
 			if (other.mat != null) return false;
 		} else if (!mat.equals(other.mat)) return false;

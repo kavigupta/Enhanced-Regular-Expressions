@@ -4,3 +4,6 @@
 /EREMatch.class
 /ERESegment.class
 /EREMetadata.class
+/EnregexMatch.class
+/EnregexMatcher.class
+/EnregexSegment.class

@@ -103,18 +103,18 @@ public class EnregexPattern {
 		this.quotOutCount = quotOutCount;
 		this.generalOutCount = generalOutCount;
 	}
-	public String process(String str, Function<EREMatch, String> matchConsumer) {
+	public String process(String str, Function<EnregexMatch, String> matchConsumer) {
 		int end = 0;
 		StringBuffer buff = new StringBuffer();
-		for (EREMatch match : process(str)) {
+		for (EnregexMatch match : process(str)) {
 			buff.append(str.substring(end, match.start()));
 			buff.append(matchConsumer.apply(match));
 		}
 		return buff.append(str.substring(end)).toString();
 	}
-	public ArrayList<EREMatch> process(String str) {
-		ERESegment segment = ERESegment.getInstance(str, type);
-		ArrayList<EREMatch> matches = new ArrayList<EREMatch>();
+	public ArrayList<EnregexMatch> process(String str) {
+		EnregexSegment segment = EnregexSegment.getInstance(str, type);
+		ArrayList<EnregexMatch> matches = new ArrayList<EnregexMatch>();
 		int end = 0;
 		while (end >= 0) {
 			end = process(end, segment.subSequence(end, segment.length()),
@@ -122,20 +122,20 @@ public class EnregexPattern {
 		}
 		return matches;
 	}
-	private int process(int offset, ERESegment segment,
-			ArrayList<EREMatch> matches) {
+	private int process(int offset, EnregexSegment segment,
+			ArrayList<EnregexMatch> matches) {
 		System.out.println(offset + "\t" + segment);
 		Matcher mat = regex.matcher(segment);
 		if (!mat.find()) return -1;
 		if (actualMatch(mat, segment)) {
-			matches.add(new EREMatch(offset, mat));
+			matches.add(new EnregexMatch(offset, mat));
 			return mat.end() + offset;
 		}
 		return process(offset + mat.start(),
 				segment.subSequence(mat.start(), segment.length() - 1),
 				matches);
 	}
-	private boolean actualMatch(Matcher mat, ERESegment segment) {
+	private boolean actualMatch(Matcher mat, EnregexSegment segment) {
 		for (int i = 0; i < parencount; i++) {
 			int openloc = mat.start(groupNameOpenParen(i));
 			int closeloc = mat.start(groupNameCloseParen(i));
