@@ -5,7 +5,7 @@ import org.junit.Test;
 
 import eredmel.enregex.EnregexType;
 
-public class EnregexTest {
+public class SingleParenMatchingTest {
 	@Before
 	public void start() {
 		EnregexTestUtil.TO_USE = EnregexType.EREDMEL;

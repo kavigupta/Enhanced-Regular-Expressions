@@ -103,7 +103,8 @@ public class EnregexPattern {
 		this.quotOutCount = quotOutCount;
 		this.generalOutCount = generalOutCount;
 	}
-	public String process(String str, Function<EnregexMatch, String> matchConsumer) {
+	public String process(String str,
+			Function<EnregexMatch, String> matchConsumer) {
 		int end = 0;
 		StringBuffer buff = new StringBuffer();
 		for (EnregexMatch match : process(str)) {
@@ -118,22 +119,22 @@ public class EnregexPattern {
 		int end = 0;
 		while (end >= 0) {
 			end = process(end, segment.subSequence(end, segment.length()),
-					matches);
+					matches, true);
 		}
 		return matches;
 	}
 	private int process(int offset, EnregexSegment segment,
-			ArrayList<EnregexMatch> matches) {
+			ArrayList<EnregexMatch> matches, boolean start) {
 		System.out.println(offset + "\t" + segment);
 		Matcher mat = regex.matcher(segment);
-		if (!mat.find()) return -1;
+		if (!mat.find()) return start ? -1 : offset + 1;
 		if (actualMatch(mat, segment)) {
 			matches.add(new EnregexMatch(offset, mat));
 			return mat.end() + offset;
 		}
 		return process(offset + mat.start(),
 				segment.subSequence(mat.start(), segment.length() - 1),
-				matches);
+				matches, false);
 	}
 	private boolean actualMatch(Matcher mat, EnregexSegment segment) {
 		for (int i = 0; i < parencount; i++) {

@@ -16,6 +16,7 @@ public class EnregexTestUtil {
 		int i = 0;
 		ArrayList<EnregexMatch> matches = EnregexPattern.getInstance(enregex,
 				TO_USE).process(text);
+		System.out.println(matches);
 		for (EnregexMatch m : matches) {
 			assertArrayEquals(i + "th element", startends[i],
 					new int[] { m.start(), m.end() });
