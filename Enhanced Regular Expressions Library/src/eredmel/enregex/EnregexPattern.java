@@ -37,8 +37,10 @@ import openjdk.regex.PatternSyntaxException;
  * and {@code ~]} match an area not in close brackets.
  */
 public class EnregexPattern {
-	public static EnregexPattern getInstance(String enregex, EnregexType type) {
+	public static EnregexPattern compile(String enregex, EnregexType type) {
 		Matcher mat = type.tildeMatcher.matcher(enregex);
+		System.out.println("tildeMatcher " + type.tildeMatcher);
+		System.out.println(enregex);
 		int parencount = 0;
 		int[] quoteincount = new int[type.quotes.size()];
 		int generaloutcount = 0;
@@ -47,6 +49,7 @@ public class EnregexPattern {
 		StringBuffer repl = new StringBuffer();
 		int end = 0;
 		tildeMatch: for (; mat.find(); end = mat.end("tilde")) {
+			System.out.println("Group: " + mat.group());
 			repl.append(enregex.substring(end, mat.start("tilde")));
 			if (mat.group("parenopen") != null) {
 				opens.add(parencount);
@@ -64,8 +67,8 @@ public class EnregexPattern {
 				continue tildeMatch;
 			}
 			if (mat.group("quotout") != null) {
-				generaloutcount++;
 				repl.append(group(groupNameGeneralOut(generaloutcount)));
+				generaloutcount++;
 				continue tildeMatch;
 			}
 			for (int i = 0; i < type.quotes.size(); i++) {
@@ -86,6 +89,7 @@ public class EnregexPattern {
 					"This tilde parenthesis has no matching open",
 					enregex, opens.pop());
 		repl.append(enregex.substring(end));
+		System.out.println(repl);
 		return new EnregexPattern(Pattern.compile(repl.toString()), type,
 				parencount, quoteincount, quoteoutcount, generaloutcount);
 	}

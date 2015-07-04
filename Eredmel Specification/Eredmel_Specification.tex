@@ -1,0 +1,106 @@
+\documentclass{article}
+
+\usepackage{color}
+\usepackage[margins=1in]{geometry}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\regex}[1]{{\color{blue}\code{#1}}}
+\newcommand{\codeblock}[1]{\begin{quote}\code{\\\noindent #1}\end{quote}}
+\newcommand{\indt}{\hspace*{2em}}
+
+\begin{document}
+
+\title{Eredmel Specification}
+\author{Kavi Gupta}
+\maketitle
+
+\section{Definitions}
+
+\begin{enumerate}
+\item ``regex'' refers to a modified version of the OpenJDK \code{java.util.regex} package (updated to support repeated capturing groups) whose documentation is packaged with Eredmel
+\item ``enregex'' refers to an enhanced regex library that allows for parenthesis matching and in quote / out of quote determination
+\item An indentation is a sequence of whitespace that defaults to a single tab. (In all examples, I will be using four spaces to represent an indentation.)
+\item The indentation level of a line is the number of indentations at the beginning of the line 
+\item A block is a line with an indentation level of $n$, followed by any number of lines with indentation levels greater than $n$
+\end{enumerate}
+
+\section{Compiler Statements}
+While Eredmel is interpreted, there is a preprocessor that acts as a compiler and produces a \code{.edc} file.
+\subsection{Replacement Statements}
+\codeblock{
+replace <regex>\\
+\indt<replacement>}
+The use of regex inputs means that replacement macroes do not need to have matched parentheses. If there are multiple lines, each line after the first will be assigned an indentation level of $(\mbox{Original indentation level}) - 1 + (\mbox{Regex match's first line's indentation level})$. The Eredmel Interpreter should go through each regex match and replace it with the given replacement text.
+
+Replacement statements may only be placed at the beginning of an Enregex source file, and are evaluated before the rest of the file is interpreted in a top-down manner.
+\subsection{Import Statements}
+\codeblock{import <filepath>}
+The Eredmel Interpeter reads the given file and loads all Replacement Statements, Native Macro Definition Statements, and Macro Definition Statements.
+\subsection{Native Macro Definition Statements}
+\codeblock{native [<ID> ]name(<argc>)}
+The Enregex Interpreter searches the directory for a file with the same name as the \code{.edl} file with the extension \code{.java}. It then compiles and loads the method with the given name and number of arguments from the file, which must have the signature:
+\codeblock{public static String <name>([String <arg1name>[, String <arg2name>[<...>]]])}
+
+\section{State Modification Statements}
+\subsection{Macro Definition Statements}
+\codeblock{
+define [<ID> ]<enregex>\\
+\indt<replacement>}
+Macro definitions are similar to replacement statements except that they take enregexes instead of regexes. Additionally, they are not expanded at the point of definition, rather at the point of being called. Therefore, they can be expanded conditionally and defined recursively.
+\subsection{Variable Definition Statements}
+\codeblock{
+define [<id> ]\{<varname>\}\\
+\indt<value>
+}
+
+The \code{value} is immediately expanded and then executed, and the result is associated with the name \code{varname}.
+
+\subsection{Macro/Variable Undefenition Statements}
+The syntax of an undefinition statement is as follows:
+\codeblock{
+undefine <ID>}
+A macro undefinition is obviously contingent on the macro having been defined with an ID. The interpreter will dissasociate the given macro or variable with the given ID from the table.
+
+\section{Control Flow Statements}
+\subsection{If statements}
+The syntax of an \code{if} statement can take one of the following forms:
+\codeblock{
+if <condition>\\
+\indt<block if so>\\
+\string[else\\
+\indt<block if else>\string]}
+
+\codeblock{
+if\\
+\indt<condition>\\
+then\\
+\indt<block if so>\\
+\string[else\\
+\indt<block if else>\string]}
+The block \code{condition} is evaluated. If it resolves to \code{'true'}, then \code{block if so} is executed. If it resolves to \code{'false'}, then it expands to the \code{block if else} if it exists or nothing if it does not. If \code{condition} resolves to something else, an error is raised and the Eredmel Interpreter exits.
+
+\subsection{Do statement}
+\codeblock{
+do\\
+\indt<block>}
+
+The block \code{block} is executed and the macro expands to nothing. This is useful for defining macroes that contain both logic and something to expand to; logic can be placed in a \code{do} statement.
+
+\subsubsection{Break statement}
+\codeblock{break}
+
+If the line \code{break} appears in a \code{do} block, the evaluation is ended and the interpreter jumps to the end of the block.
+
+\section{Macro Expansion Calls}
+Anything that does not match one of the above patterns is assumed to be a macro expansion call. First, all variables are replaced with their values from the lookup table. If the line does not match any stored macro, then an error will be raised. Otherwise, the macro matched will be expanded and the block will be reinterpreted.
+\section{Interpretation}
+A script in Eredmel is interpreted top-down with each block being fed into the interpreter.
+
+\subsection{Block interpreter}
+The interpreter will first try to match the block against any of the above statements. If it does not match any of them, it 
+\begin{itemize}
+\item System functions. These are covered in greater detail below. Basically, the argument to these is fully expanded and the results are fed into the system function, evaluated in Java.
+\item Macro Expansion Statements. These are covered in greater detail below. These are directives to the interpreter that add or subtract macroes from the environment or conditionally expand macroes.
+\item Valid enregex matches.
+\end{itemize}
+
+\end{document}

@@ -14,7 +14,7 @@ public class EnregexTestUtil {
 	public static void assertMatch(String enregex, String text,
 			int[][] startends) {
 		int i = 0;
-		ArrayList<EnregexMatch> matches = EnregexPattern.getInstance(enregex,
+		ArrayList<EnregexMatch> matches = EnregexPattern.compile(enregex,
 				TO_USE).process(text);
 		System.out.println(matches);
 		for (EnregexMatch m : matches) {

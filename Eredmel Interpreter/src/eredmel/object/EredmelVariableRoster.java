@@ -13,7 +13,7 @@ public class EredmelVariableRoster {
 	}
 	public String expand(String line) {
 		for (Entry<String, EredmelObject> var : variables.entrySet()) {
-			line = EnregexPattern.getInstance(
+			line = EnregexPattern.compile(
 					"[^A-Za-z]" + var.getKey() + "^A-Za-z",
 					EnregexType.EREDMEL).process(line,
 					x -> var.getValue().asString());

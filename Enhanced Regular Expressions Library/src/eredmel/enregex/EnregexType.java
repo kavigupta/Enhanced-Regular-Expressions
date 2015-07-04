@@ -9,8 +9,8 @@ public class EnregexType {
 	public static final EnregexType EREDMEL = new EnregexType(
 			Arrays.asList(new SymbolPair('(', ')', false, false)),
 			Arrays.asList(new SymbolPair('\'', '\'', false, true)));
-	private static final String TILDE_PAREN = "(?<!\\\\\\\\)(\\\\\\\\\\\\\\\\)*"
-			+ "(?<tilde>~((?<parenopen><)|(?<parenclose>>)|(?<quotout>^)%s))";
+	private static final String TILDE_PAREN = "(?<!\\\\)(\\\\\\\\)*"
+			+ "(?<tilde>~((?<parenopen><)|(?<parenclose>>)|(?<quotout>~)%s))";
 	public final List<SymbolPair> parens;
 	public final List<SymbolPair> quotes;
 	public final Pattern tildeMatcher;
@@ -32,13 +32,16 @@ public class EnregexType {
 	}
 	private static String openRegex(SymbolPair pair) {
 		if (pair.same()) return quote(pair.open);
-		return quote(pair.open) + "|(^" + quote(pair.close) + ")";
+		return quote(pair.open) + "|(" + quote("^" + pair.close) + ")";
 	}
 	private static String closeRegex(SymbolPair pair) {
-		if (pair.same()) return quote(pair.close);
-		return quote(pair.close) + "|(^" + quote(pair.open) + ")";
+		if (pair.same()) return quote("^" + pair.close);
+		return quote(pair.close) + "|(" + quote("^" + pair.open) + ")";
 	}
-	private static String quote(char open) {
-		return Pattern.quote(Character.toString(open));
+	private static String quote(char c) {
+		return quote(Character.toString(c));
+	}
+	private static String quote(String str) {
+		return Pattern.quote(str);
 	}
 }
