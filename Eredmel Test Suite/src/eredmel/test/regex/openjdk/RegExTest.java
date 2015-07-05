@@ -1,4 +1,4 @@
-package test.regex.openjdk;
+package eredmel.test.regex.openjdk;
 
 /*
  * Copyright (c) 1999, 2011, Oracle and/or its affiliates. All rights reserved.
@@ -65,11 +65,15 @@ public class RegExTest {
 	 */
 	@Test
 	public void main() throws Exception {
+		String pack = "src"
+				+ File.separator
+				+ RegExTest.class.getPackage().getName()
+						.replace(".", File.separator) + File.separator;
 		// Most of the tests are in a file
-		processFile("TestCases.txt");
+		processFile(pack + "TestCases.txt");
 		// processFile("PerlCases.txt");
-		processFile("BMPTestCases.txt");
-		processFile("SupplementaryTestCases.txt");
+		processFile(pack + "BMPTestCases.txt");
+		processFile(pack + "SupplementaryTestCases.txt");
 	}
 	// Utility functions
 	private static String getRandomAlphaString(int length) {

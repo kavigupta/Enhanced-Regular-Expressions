@@ -21,6 +21,10 @@ public class QuoteMatchingTest {
 						new SymbolPair('/', '/', true, false)));
 	}
 	@Test
+	public void quoteMatchingTest() {
+		assertMatch("'(.~')*'", "'a' 'b'", new int[][] { { 0, 3 }, { 5, 8 } });
+	}
+	@Test
 	public void basicInNotQuoteTest() {
 		assertMatch("~^'->", "'a'->'e'", new int[][] { { 3, 5 } });
 		assertMatch("~^'->", "[a][->][e]", new int[][] { { 4, 6 } });

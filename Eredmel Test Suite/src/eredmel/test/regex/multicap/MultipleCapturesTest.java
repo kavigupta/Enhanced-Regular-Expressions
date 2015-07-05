@@ -1,4 +1,4 @@
-package test.regex.multiplecap;
+package eredmel.test.regex.multicap;
 
 import static org.junit.Assert.assertEquals;
 import openjdk.regex.Matcher;
@@ -15,6 +15,7 @@ public class MultipleCapturesTest {
 				"abc");
 		assertCorrectIterations("(def)*(abc)*(asdf35432)?", "abcabc", 2,
 				"abc", "abc");
+		assertCorrectIterations("(a)+b", "aab", 1, "a", "a");
 	}
 	@Test
 	public void charclasssTest() {
@@ -22,6 +23,11 @@ public class MultipleCapturesTest {
 				"d", "e", "f");
 		assertCorrectIterations("(([0-9]+)[^0-9]*)+", "1 2 345 12", 2, "1",
 				"2", "345", "12");
+		assertCorrectIterations("(.)+b", "acb", 1, "a", "c");
+	}
+	@Test
+	public void zeroLengthTest() {
+		assertCorrectIterations("'(.(?<name>))*'", "'a'", "name", "a");
 	}
 	@Test
 	public void orTest() {

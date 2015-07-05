@@ -37,6 +37,9 @@ public class EnregexMatch {
 	public int groupCount(int group) {
 		return mat.groupCount();
 	}
+	public String replace(String replacement) {
+		return mat.interpretReplacement(replacement);
+	}
 	@Override
 	public int hashCode() {
 		final int prime = 31;

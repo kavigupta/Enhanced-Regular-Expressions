@@ -25,8 +25,8 @@
 package openjdk.regex;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Objects;
-import java.util.TreeSet;
 
 /**
  * An engine that performs match operations on a
@@ -119,10 +119,33 @@ public final class Matcher implements MatchResult {
 	 * a group was skipped during the matching.
 	 */
 	ArrayList<Range>[] groupsr;
+	void removeGroup(int i) {
+		System.out.println("Backoff stuff");
+		System.out.println("!:" + Arrays.asList(this.groupsr));
+		groupsr[i].remove(groupsr[i].size() - 1);
+		System.out.println("@:" + Arrays.asList(this.groupsr));
+		System.out.println();
+	}
+	@SuppressWarnings("unchecked")
+	ArrayList<Range>[] cloneOfGroupsr() {
+		ArrayList<Range>[] clone = new ArrayList[groupsr.length];
+		for (int i = 0; i < clone.length; i++)
+			clone[i] = (ArrayList<Range>) groupsr[i].clone();
+		return clone;
+	}
+	void set0Group(Range of) {
+		ArrayList<Range> zero = new ArrayList<Range>();
+		zero.add(of);
+		groupsr[0] = zero;
+	}
 	void cacheGroup(int i, Range of) {
 		// if (range(i) != null && of.start < range(i).end)
 		// throw new RuntimeException();
+		System.out.println("Backoff stuff");
+		System.out.println("!:" + Arrays.asList(this.groupsr));
 		groupsr[i].add(of);
+		System.out.println("@:" + Arrays.asList(this.groupsr));
+		System.out.println();
 	}
 	/**
 	 * The range within the sequence that is to be matched. Anchors
@@ -318,15 +341,21 @@ public final class Matcher implements MatchResult {
 	 *         or if the previous match operation failed
 	 */
 	public Range range(int group) {
-		return range(group, iterations(group) - 1);
+		boolean cache = sorted;
+		sorted = true;
+		Range r = range(group, iterations(group) - 1);
+		sorted = cache;
+		return r;
 	}
 	public int iterations(int group) {
+		sortGroups();
 		return groupsr[group].size();
 	}
 	public int iterations(String group) {
 		return iterations(getMatchedGroupIndex(group));
 	}
 	public Range range(int group, int iteration) {
+		sortGroups();
 		if (iteration >= groupsr[group].size() || iteration < 0) return null;
 		return groupsr[group].get(iteration);
 	}
@@ -1190,6 +1219,7 @@ public final class Matcher implements MatchResult {
 	 * the end of the previous match.
 	 */
 	boolean search(int from) {
+		sorted = false;
 		this.hitEnd = false;
 		this.requireEnd = false;
 		from = from < 0 ? 0 : from;
@@ -1200,7 +1230,6 @@ public final class Matcher implements MatchResult {
 		boolean result = parentPattern.root.match(this, from, text);
 		if (!result) this.first = -1;
 		this.oldLast = this.last;
-		sortGroups();
 		return result;
 	}
 	/**
@@ -1272,12 +1301,33 @@ public final class Matcher implements MatchResult {
 		for (int i = 0; i < groupsr.length; i++)
 			groupsr[i] = new ArrayList<>();
 	}
+	/**
+	 * Crazily dirty hack that allows for lazy group sorting, enabling the use
+	 * of the matches() function to sort groups. TODO BETTER WAY TO HANDLE THIS
+	 */
+	boolean sorted = false;
 	private void sortGroups() {
+		if (sorted) return;
 		ArrayList<Range> zero = new ArrayList<>();
 		zero.add(range(0));
 		groupsr[0] = zero;
-		for (int i = 1; i < groupsr.length; i++)
-			groupsr[i] = new ArrayList<>(new TreeSet<>(groupsr[i]));
+		for (int i = 1; i < groupsr.length; i++) {
+			if (groupsr[i].size() == 0) continue;
+			System.out.println(groupsr[i]);
+			ArrayList<Range> alr = new ArrayList<Range>();
+			alr.add(groupsr[i].get(0));
+			for (int j = 1; j < groupsr[i].size(); j++) {
+				if (groupsr[i].get(j).start == alr.get(alr.size() - 1).start)
+					continue;
+				while (alr.size() > 0
+						&& groupsr[i].get(j).start < alr
+								.get(alr.size() - 1).start)
+					alr.remove(alr.size() - 1);
+				alr.add(groupsr[i].get(j));
+			}
+			groupsr[i] = alr;
+		}
+		// TODO fix the predicate now!!!
 	}
 	public MatchCache permanantResult() {
 		return new MatchCache(this);
