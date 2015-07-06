@@ -1276,12 +1276,11 @@ public final class Pattern implements java.io.Serializable {
 	/**
 	 * Temporary storage used while parsing group references.
 	 */
-	transient GroupHead[] groupNodes;
 	/**
 	 * Stores a tree of groups. This is part of a major dirty hack
 	 * and should be deleted later. TODO fix the hack
 	 */
-	private static final class GroupTree {
+	private static final class GroupTree implements java.io.Serializable {
 		final int id;
 		final int start, end;
 		final ArrayList<GroupTree> groups;
@@ -1312,18 +1311,18 @@ public final class Pattern implements java.io.Serializable {
 		}
 		groups.add(current);
 	}
-	transient ArrayList<GroupTree> groups;
+	private ArrayList<GroupTree> groups;
 	/**
 	 * Temporary null terminated code point array used by pattern compiling.
 	 */
-	private transient int[] temp;
+	private transient CodepointSequence codes;
 	/**
 	 * The number of capturing groups in this Pattern. Used by matchers to
 	 * allocate storage needed to perform a match.
 	 */
 	transient int capturingGroupCount;
 	/**
-	 * The local variable count used by parsing tree. Used by matchers to
+	 * The local variable c ount used by parsing tree. Used by matchers to
 	 * allocate storage needed to perform a match.
 	 */
 	transient int localCount;
@@ -1332,10 +1331,6 @@ public final class Pattern implements java.io.Serializable {
 	 * parsed.
 	 */
 	private transient int cursor;
-	/**
-	 * Holds the length of the pattern string.
-	 */
-	private transient int patternLength;
 	/**
 	 * If the Start node might possibly match supplementary characters.
 	 * It is set to true during compiling if
@@ -1684,11 +1679,11 @@ public final class Pattern implements java.io.Serializable {
 	 * The pattern is converted to normalizedD form and then a pure group
 	 * is constructed to match canonical equivalences of the characters.
 	 */
-	private void normalize() {
+	private static String normalize(String pattern, int patternLength) {
 		int lastCodePoint = -1;
 		// Convert pattern into normalizedD form
-		normalizedPattern = Normalizer
-				.normalize(pattern, Normalizer.Form.NFD);
+		String normalizedPattern = Normalizer.normalize(pattern,
+				Normalizer.Form.NFD);
 		patternLength = normalizedPattern.length();
 		// Modify pattern to match canonical equivalences
 		StringBuilder newPattern = new StringBuilder(patternLength);
@@ -1712,21 +1707,22 @@ public final class Pattern implements java.io.Serializable {
 						- Character.charCount(lastCodePoint));
 				newPattern.append("(?:").append(ea).append(")");
 			} else if (c == '[' && lastCodePoint != '\\') {
-				i = normalizeCharClass(newPattern, i);
+				i = normalizeCharClass(normalizedPattern, newPattern, i);
 			} else {
 				newPattern.appendCodePoint(c);
 			}
 			lastCodePoint = c;
 			i += Character.charCount(c);
 		}
-		normalizedPattern = newPattern.toString();
+		return newPattern.toString();
 	}
 	/**
 	 * Complete the character class being parsed and add a set
 	 * of alternations to it that will match the canonical equivalences
 	 * of the characters within the class.
 	 */
-	private int normalizeCharClass(StringBuilder newPattern, int i) {
+	private static int normalizeCharClass(String normalizedPattern,
+			StringBuilder newPattern, int i) {
 		StringBuilder charClass = new StringBuilder();
 		StringBuilder eq = null;
 		int lastCodePoint = -1;
@@ -1760,7 +1756,8 @@ public final class Pattern implements java.io.Serializable {
 				i++;
 			}
 			if (i == normalizedPattern.length())
-				throw error("Unclosed character class");
+				throw new PatternSyntaxException(
+						"Unclosed character class", normalizedPattern, i);
 			lastCodePoint = c;
 		}
 		if (eq != null) {
@@ -1776,7 +1773,7 @@ public final class Pattern implements java.io.Serializable {
 	 * combining marks that follow it, produce the alternation that will
 	 * match all canonical equivalences of that sequence.
 	 */
-	private String produceEquivalentAlternation(String source) {
+	private static String produceEquivalentAlternation(String source) {
 		int len = countChars(source, 0, 1);
 		if (source.length() == len)
 		// source has one character.
@@ -1804,7 +1801,7 @@ public final class Pattern implements java.io.Serializable {
 	 * possibilities must be removed because they are not canonically
 	 * equivalent.
 	 */
-	private String[] producePermutations(String input) {
+	private static String[] producePermutations(String input) {
 		if (input.length() == countChars(input, 0, 1))
 			return new String[] { input };
 		if (input.length() == countChars(input, 0, 2)) {
@@ -1854,7 +1851,7 @@ public final class Pattern implements java.io.Serializable {
 			result[x] = temp[x];
 		return result;
 	}
-	private int getClass(int c) {
+	private static int getClass(int c) {
 		return sun.text.Normalizer.getCombiningClass(c);
 	}
 	/**
@@ -1864,7 +1861,7 @@ public final class Pattern implements java.io.Serializable {
 	 * combining mark followed by the remaining combining marks. Returns
 	 * null if the first two characters cannot be further composed.
 	 */
-	private String composeOneStep(String input) {
+	private static String composeOneStep(String input) {
 		int len = countChars(input, 0, 2);
 		String firstTwoCharacters = input.substring(0, len);
 		String result = Normalizer.normalize(firstTwoCharacters,
@@ -1881,12 +1878,12 @@ public final class Pattern implements java.io.Serializable {
 	 * See the description of `quotemeta' in perlfunc(1).
 	 */
 	private void RemoveQEQuoting() {
-		final int pLen = patternLength;
+		final int pLen = codes.length;
 		int i = 0;
 		while (i < pLen - 1) {
-			if (temp[i] != '\\')
+			if (codes.pointAt(i) != '\\')
 				i += 1;
-			else if (temp[i + 1] != 'Q')
+			else if (codes.pointAt(i + 1) != 'Q')
 				i += 2;
 			else break;
 		}
@@ -1894,14 +1891,15 @@ public final class Pattern implements java.io.Serializable {
 			return;
 		int j = i;
 		i += 2;
-		int[] newtemp = new int[j + 3 * (pLen - i) + 2];
-		System.arraycopy(temp, 0, newtemp, 0, j);
+		CodepointSequence newcodes = codes.copyToSize(j + 3 * (pLen - i) + 2);
 		boolean inQuote = true;
 		boolean beginQuote = true;
 		while (i < pLen) {
-			int c = temp[i++];
+			int c = newcodes.pointAt(i);
+			i++;
 			if (!ASCII.isAscii(c) || ASCII.isAlpha(c)) {
-				newtemp[j++] = c;
+				newcodes.setPointAt(j, c);
+				j++;
 			} else if (ASCII.isDigit(c)) {
 				if (beginQuote) {
 					/*
@@ -1909,37 +1907,38 @@ public final class Pattern implements java.io.Serializable {
 					 * and we don't want this numeric char to processed as
 					 * part of the escape.
 					 */
-					newtemp[j++] = '\\';
-					newtemp[j++] = 'x';
-					newtemp[j++] = '3';
+					newcodes.setPointAt(j++, '\\');
+					newcodes.setPointAt(j++, 'x');
+					newcodes.setPointAt(j++, '3');
 				}
-				newtemp[j++] = c;
+				newcodes.setPointAt(j++, c);
 			} else if (c != '\\') {
-				if (inQuote) newtemp[j++] = '\\';
-				newtemp[j++] = c;
+				if (inQuote) newcodes.setPointAt(j++, '\\');
+				newcodes.setPointAt(j++, c);
 			} else if (inQuote) {
-				if (temp[i] == 'E') {
+				if (codes.pointAt(i) == 'E') {
 					i++;
 					inQuote = false;
 				} else {
-					newtemp[j++] = '\\';
-					newtemp[j++] = '\\';
+					newcodes.setPointAt(j++, '\\');
+					newcodes.setPointAt(j++, '\\');
 				}
 			} else {
-				if (temp[i] == 'Q') {
+				if (codes.pointAt(i) == 'Q') {
 					i++;
 					inQuote = true;
 					beginQuote = true;
 					continue;
 				} else {
-					newtemp[j++] = c;
-					if (i != pLen) newtemp[j++] = temp[i++];
+					newcodes.setPointAt(j++, c);
+					if (i != pLen)
+						newcodes.setPointAt(j++, codes.pointAt(i++));
 				}
 			}
 			beginQuote = false;
 		}
-		patternLength = j;
-		temp = Arrays.copyOf(newtemp, j + 2); // double zero termination
+		codes.length = j;
+		codes = newcodes.copyToSize(j + 2);
 	}
 	/**
 	 * Copies regular expression to an int array and invokes the parsing
@@ -1948,39 +1947,37 @@ public final class Pattern implements java.io.Serializable {
 	private void compile() {
 		// Handle canonical equivalences
 		if (has(CANON_EQ) && !has(LITERAL)) {
-			normalize();
+			normalizedPattern = normalize(pattern, codes.length);
 		} else {
 			normalizedPattern = pattern;
 		}
-		patternLength = normalizedPattern.length();
 		// Copy pattern to int array for convenience
 		// Use double zero to terminate pattern
-		temp = new int[patternLength + 2];
+		codes = CodepointSequence.construct(normalizedPattern.length());
 		hasSupplementary = false;
 		int c, count = 0;
 		// Convert all chars into code points
-		for (int x = 0; x < patternLength; x += Character.charCount(c)) {
+		for (int x = 0; x < codes.length; x += Character.charCount(c)) {
 			c = normalizedPattern.codePointAt(x);
 			if (isSupplementary(c)) {
 				hasSupplementary = true;
 			}
-			temp[count++] = c;
+			codes.setPointAt(count++, c);
 		}
-		patternLength = count; // patternLength now in code points
+		codes.length = count; // patternLength now in code points
 		if (!has(LITERAL)) RemoveQEQuoting();
 		// Allocate all temporary objects here.
 		buffer = new int[32];
-		groupNodes = new GroupHead[10];
 		namedGroups = null;
 		if (has(LITERAL)) {
 			// Literal pattern handling
-			matchRoot = newSlice(temp, patternLength, hasSupplementary);
+			matchRoot = newSlice(codes, hasSupplementary);
 			matchRoot.next = lastAccept;
 		} else {
 			// Start recursive descent parsing
 			matchRoot = expr(lastAccept);
 			// Check extra pattern characters
-			if (patternLength != cursor) {
+			if (codes.length != cursor) {
 				if (peek() == ')') {
 					throw error("Unmatched closing ')'");
 				} else {
@@ -2002,10 +1999,8 @@ public final class Pattern implements java.io.Serializable {
 					matchRoot);
 		}
 		// Release temporary storage
-		temp = null;
 		buffer = null;
-		groupNodes = null;
-		patternLength = 0;
+		codes = CodepointSequence.construct(0);
 		compiled = true;
 	}
 	Map<String, Integer> namedGroups() {
@@ -2083,7 +2078,7 @@ public final class Pattern implements java.io.Serializable {
 	 * Match next character, signal error if failed.
 	 */
 	private void accept(int ch, String s) {
-		int testChar = temp[cursor++];
+		int testChar = codes.pointAt(cursor++);
 		if (has(COMMENTS)) testChar = parsePastWhitespace(testChar);
 		if (ch != testChar) { throw error(s); }
 	}
@@ -2091,13 +2086,13 @@ public final class Pattern implements java.io.Serializable {
 	 * Mark the end of pattern with a specific character.
 	 */
 	private void mark(int c) {
-		temp[patternLength] = c;
+		codes.setPointAt(codes.length, c);
 	}
 	/**
 	 * Peek the next character, and do not advance the cursor.
 	 */
 	private int peek() {
-		int ch = temp[cursor];
+		int ch = codes.pointAt(cursor);
 		if (has(COMMENTS)) ch = peekPastWhitespace(ch);
 		return ch;
 	}
@@ -2105,7 +2100,7 @@ public final class Pattern implements java.io.Serializable {
 	 * Read the next character, and advance the cursor by one.
 	 */
 	private int read() {
-		int ch = temp[cursor++];
+		int ch = codes.pointAt(cursor++);
 		if (has(COMMENTS)) ch = parsePastWhitespace(ch);
 		return ch;
 	}
@@ -2115,14 +2110,14 @@ public final class Pattern implements java.io.Serializable {
 	 */
 	@SuppressWarnings("unused")
 	private int readEscaped() {
-		int ch = temp[cursor++];
+		int ch = codes.pointAt(cursor++);
 		return ch;
 	}
 	/**
 	 * Advance the cursor by one, and peek the next character.
 	 */
 	private int next() {
-		int ch = temp[++cursor];
+		int ch = codes.pointAt(++cursor);
 		if (has(COMMENTS)) ch = peekPastWhitespace(ch);
 		return ch;
 	}
@@ -2131,7 +2126,7 @@ public final class Pattern implements java.io.Serializable {
 	 * ignoring the COMMENTS setting
 	 */
 	private int nextEscaped() {
-		int ch = temp[++cursor];
+		int ch = codes.pointAt(++cursor);
 		return ch;
 	}
 	/**
@@ -2140,7 +2135,7 @@ public final class Pattern implements java.io.Serializable {
 	private int peekPastWhitespace(int ch) {
 		while (ASCII.isSpace(ch) || ch == '#') {
 			while (ASCII.isSpace(ch))
-				ch = temp[++cursor];
+				ch = codes.pointAt(++cursor);
 			if (ch == '#') {
 				ch = peekPastLine();
 			}
@@ -2153,7 +2148,7 @@ public final class Pattern implements java.io.Serializable {
 	private int parsePastWhitespace(int ch) {
 		while (ASCII.isSpace(ch) || ch == '#') {
 			while (ASCII.isSpace(ch))
-				ch = temp[cursor++];
+				ch = codes.pointAt(++cursor);
 			if (ch == '#') ch = parsePastLine();
 		}
 		return ch;
@@ -2162,18 +2157,18 @@ public final class Pattern implements java.io.Serializable {
 	 * xmode parse past comment to end of line.
 	 */
 	private int parsePastLine() {
-		int ch = temp[cursor++];
+		int ch = codes.pointAt(cursor++);
 		while (ch != 0 && !isLineSeparator(ch))
-			ch = temp[cursor++];
+			ch = codes.pointAt(cursor++);
 		return ch;
 	}
 	/**
 	 * xmode peek past comment to end of line.
 	 */
 	private int peekPastLine() {
-		int ch = temp[++cursor];
+		int ch = codes.pointAt(++cursor);
 		while (ch != 0 && !isLineSeparator(ch))
-			ch = temp[++cursor];
+			ch = codes.pointAt(++cursor);
 		return ch;
 	}
 	/**
@@ -2191,7 +2186,7 @@ public final class Pattern implements java.io.Serializable {
 	 */
 	private int skip() {
 		int i = cursor;
-		int ch = temp[i + 1];
+		int ch = codes.pointAt(i + 1);
 		cursor = i + 2;
 		return ch;
 	}
@@ -2214,7 +2209,7 @@ public final class Pattern implements java.io.Serializable {
 	 */
 	private boolean findSupplementary(int start, int end) {
 		for (int i = start; i < end; i++) {
-			if (isSupplementary(temp[i])) return true;
+			if (isSupplementary(codes.pointAt(i))) return true;
 		}
 		return false;
 	}
@@ -2368,7 +2363,7 @@ public final class Pattern implements java.io.Serializable {
 					throw error("Dangling meta character '" + ((char) ch)
 							+ "'");
 				case 0:
-					if (cursor >= patternLength) {
+					if (cursor >= codes.length) {
 						break LOOP;
 					}
 					// Fall through
@@ -2450,7 +2445,7 @@ public final class Pattern implements java.io.Serializable {
 					cursor = prev;
 					break;
 				case 0:
-					if (cursor >= patternLength) {
+					if (cursor >= codes.length) {
 						break;
 					}
 					// Fall through
@@ -2469,7 +2464,8 @@ public final class Pattern implements java.io.Serializable {
 		if (first == 1) {
 			return newSingle(buffer[0]);
 		} else {
-			return newSlice(buffer, first, hasSupplementary);
+			return newSlice(new CodepointSequence(buffer, first),
+					hasSupplementary);
 		}
 	}
 	private void append(int ch, int len) {
@@ -2729,7 +2725,7 @@ public final class Pattern implements java.io.Serializable {
 				case '^':
 					// Negates if first char in a class, otherwise literal
 					if (firstInClass) {
-						if (temp[cursor - 1] != '[') break;
+						if (codes.pointAt(cursor - 1) != '[') break;
 						ch = next();
 						include = !include;
 						continue;
@@ -2779,7 +2775,7 @@ public final class Pattern implements java.io.Serializable {
 					continue;
 				case 0:
 					firstInClass = false;
-					if (cursor >= patternLength)
+					if (cursor >= codes.length)
 						throw error("Unclosed character class");
 					break;
 				case ']':
@@ -2840,7 +2836,7 @@ public final class Pattern implements java.io.Serializable {
 				else oneLetter = false;
 				return family(oneLetter, comp);
 			} else { // ordinary escape
-				boolean isrange = temp[cursor + 1] == '-';
+				boolean isrange = codes.pointAt(cursor + 1) == '-';
 				unread();
 				ch = escape(true, true, isrange);
 				if (ch == -1) return (CharProperty) root;
@@ -2850,7 +2846,7 @@ public final class Pattern implements java.io.Serializable {
 		}
 		if (ch >= 0) {
 			if (peek() == '-') {
-				int endRange = temp[cursor + 1];
+				int endRange = codes.pointAt(cursor + 1);
 				if (endRange == '[') { return bitsOrSingle(bits, ch); }
 				if (endRange != ']') {
 					next();
@@ -2878,11 +2874,11 @@ public final class Pattern implements java.io.Serializable {
 		String name;
 		CharProperty node = null;
 		if (singleLetter) {
-			int c = temp[cursor];
+			int c = codes.pointAt(cursor);
 			if (!Character.isSupplementaryCodePoint(c)) {
 				name = String.valueOf((char) c);
 			} else {
-				name = new String(temp, cursor, 1);
+				name = codes.toString(cursor, 1);
 			}
 			read();
 		} else {
@@ -2891,9 +2887,9 @@ public final class Pattern implements java.io.Serializable {
 			while (read() != '}') {}
 			mark('\000');
 			int j = cursor;
-			if (j > patternLength) throw error("Unclosed character family");
+			if (j > codes.length) throw error("Unclosed character family");
 			if (i + 1 >= j) throw error("Empty character family");
-			name = new String(temp, i, j - i - 1);
+			name = codes.toString(i, j - i - 1);
 		}
 		int i = name.indexOf('=');
 		if (i != -1) {
@@ -3051,7 +3047,7 @@ public final class Pattern implements java.io.Serializable {
 					if (info.maxValid == false) { throw error("Look-behind group does not have "
 							+ "an obvious maximum length"); }
 					boolean hasSupplementary = findSupplementary(start,
-							patternLength);
+							codes.length);
 					if (ch == '=') {
 						head = tail = (hasSupplementary ? new BehindS(
 								head, info.maxLength, info.minLength)
@@ -3160,7 +3156,6 @@ public final class Pattern implements java.io.Serializable {
 		if (!anonymous) groupIndex = capturingGroupCount++;
 		GroupHead head = new GroupHead(localIndex);
 		root = new GroupTail(localIndex, groupIndex);
-		if (!anonymous && groupIndex < 10) groupNodes[groupIndex] = head;
 		return head;
 	}
 	@SuppressWarnings("fallthrough")
@@ -3286,7 +3281,7 @@ public final class Pattern implements java.io.Serializable {
 				}
 				return new Curly(prev, 1, MAX_REPS, GREEDY);
 			case '{':
-				ch = temp[cursor + 1];
+				ch = codes.pointAt(cursor + 1);
 				if (ASCII.isDigit(ch)) {
 					skip();
 					int cmin = 0;
@@ -3332,7 +3327,7 @@ public final class Pattern implements java.io.Serializable {
 	 * Utility method for parsing control escape sequences.
 	 */
 	private int c() {
-		if (cursor < patternLength) { return read() ^ 64; }
+		if (cursor < codes.length) { return read() ^ 64; }
 		throw error("Illegal control escape sequence");
 	}
 	/**
@@ -3514,24 +3509,24 @@ public final class Pattern implements java.io.Serializable {
 	/**
 	 * Utility method for creating a string slice matcher.
 	 */
-	private Node newSlice(int[] buf, int count, boolean hasSupplementary) {
-		int[] tmp = new int[count];
+	private Node newSlice(CodepointSequence bufcodes, boolean hasSupplementary) {
+		int[] tmp = new int[bufcodes.length];
 		if (has(CASE_INSENSITIVE)) {
 			if (has(UNICODE_CASE)) {
-				for (int i = 0; i < count; i++) {
+				for (int i = 0; i < bufcodes.length; i++) {
 					tmp[i] = Character.toLowerCase(Character
-							.toUpperCase(buf[i]));
+							.toUpperCase(bufcodes.pointAt(i)));
 				}
 				return hasSupplementary ? new SliceUS(tmp)
 						: new SliceU(tmp);
 			}
-			for (int i = 0; i < count; i++) {
-				tmp[i] = ASCII.toLower(buf[i]);
+			for (int i = 0; i < bufcodes.length; i++) {
+				tmp[i] = ASCII.toLower(bufcodes.pointAt(i));
 			}
 			return hasSupplementary ? new SliceIS(tmp) : new SliceI(tmp);
 		}
-		for (int i = 0; i < count; i++) {
-			tmp[i] = buf[i];
+		for (int i = 0; i < bufcodes.length; i++) {
+			tmp[i] = bufcodes.pointAt(i);
 		}
 		return hasSupplementary ? new SliceS(tmp) : new Slice(tmp);
 	}
@@ -5974,7 +5969,7 @@ public final class Pattern implements java.io.Serializable {
 	 * Gets the pattern associated with this group
 	 */
 	public Pattern groupPattern(int group) {
-		return Pattern.compile(new String(temp, groups.get(group).start,
+		return Pattern.compile(codes.toString(groups.get(group).start,
 				groups.get(group).end - groups.get(group).start));
 	}
 }
