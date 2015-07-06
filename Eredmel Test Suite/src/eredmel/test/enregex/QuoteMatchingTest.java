@@ -22,15 +22,12 @@ public class QuoteMatchingTest {
 						new SymbolPair('/', '/', true, false)));
 	}
 	@Test
-<<<<<<< HEAD
 	@Ignore
 	// TODO unignore
 	public void quoteMatchingTest() {
 		assertMatch("'(.~')*'", "'a' 'b'", new int[][] { { 0, 3 }, { 5, 8 } });
 	}
 	@Test
-=======
->>>>>>> parent of 98e00ef... OK, done with trying to hack the OpenJDK regex library more than I already have to allow for repeated capturing groups. The new plan is to try to extract the parser and elements of the matcher into a more extensible state so that I can just directly program in the enhancements.
 	public void basicInNotQuoteTest() {
 		assertMatch("~^'->", "'a'->'e'", new int[][] { { 3, 5 } });
 		assertMatch("~^'->", "[a][->][e]", new int[][] { { 4, 6 } });

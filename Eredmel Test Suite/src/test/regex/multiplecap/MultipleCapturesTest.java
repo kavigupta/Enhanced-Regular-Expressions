@@ -4,11 +4,8 @@ import static org.junit.Assert.assertEquals;
 import openjdk.regex.Matcher;
 import openjdk.regex.Pattern;
 
-import org.junit.Ignore;
 import org.junit.Test;
 
-@Ignore
-// TODO unignore
 public class MultipleCapturesTest {
 	@Test
 	public void literalTest() {
