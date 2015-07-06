@@ -1,4 +1,4 @@
-package eredmel.test.regex.openjdk;
+package test.regex.openjdk;
 
 /*
  * Copyright (c) 2011, Oracle and/or its affiliates. All rights reserved.

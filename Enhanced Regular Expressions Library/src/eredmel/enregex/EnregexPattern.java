@@ -123,18 +123,12 @@ public class EnregexPattern {
 		int end = 0;
 		while (end >= 0) {
 			end = process(end, segment.subSequence(end, segment.length()),
-					matches, true, Integer.MAX_VALUE);
+					matches, true);
 		}
 		return matches;
 	}
-	public EnregexMatch firstMatch(String str) {
-		ArrayList<EnregexMatch> mat = new ArrayList<EnregexMatch>();
-		process(0, EnregexSegment.getInstance(str, type), mat, true, 1);
-		return mat.size() > 0 ? mat.get(0) : null;
-	}
 	private int process(int offset, EnregexSegment segment,
-			ArrayList<EnregexMatch> matches, boolean start, int limit) {
-		if (matches.size() >= limit) return -1;
+			ArrayList<EnregexMatch> matches, boolean start) {
 		System.out.println(offset + "\t" + segment);
 		Matcher mat = regex.matcher(segment);
 		if (!mat.find()) return start ? -1 : offset + 1;
@@ -144,51 +138,37 @@ public class EnregexPattern {
 		}
 		return process(offset + mat.start(),
 				segment.subSequence(mat.start(), segment.length() - 1),
-				matches, false, limit);
+				matches, false);
 	}
 	private boolean actualMatch(Matcher mat, EnregexSegment segment) {
 		for (int i = 0; i < parencount; i++) {
-			int iterations = mat.iterations(groupNameOpenParen(i));
-			if (mat.iterations(groupNameCloseParen(i)) != iterations)
-				return false;
-			for (int it = 0; it < iterations; it++) {
-				int openloc = mat.range(groupNameOpenParen(i), it).start;
-				int closeloc = mat.range(groupNameCloseParen(i), it).start;
-				System.out.println("Paseed starting");
-				if (!segment.parensMatch(openloc, closeloc)) return false;
-			}
+			int openloc = mat.start(groupNameOpenParen(i));
+			int closeloc = mat.start(groupNameCloseParen(i));
+			if (openloc == -1 && closeloc == -1) continue;
+			if (openloc == -1 || closeloc == -1) return false;
+			System.out.println("Paseed starting");
+			if (!segment.parensMatch(openloc, closeloc)) return false;
 		}
 		System.out.println("Passed Paren Test");
 		for (int quoteType = 0; quoteType < quotInCount.length; quoteType++) {
 			for (int i = 0; i < quotInCount[quoteType]; i++) {
-				System.out.println("Iterations: "
-						+ mat.iterations(groupNameInQuot(quoteType, i)));
-				for (int it = 0; it < mat.iterations(groupNameInQuot(
-						quoteType, i)); it++) {
-					int loc = mat.range(groupNameInQuot(quoteType, i), it).start;
-					System.out.println(loc);
-					if (!segment.quoteTypeMatches(loc, quoteType))
-						return false;
-				}
+				int loc = mat.start(groupNameInQuot(quoteType, i));
+				if (loc == -1) continue;
+				if (!segment.quoteTypeMatches(loc, quoteType))
+					return false;
 			}
 		}
-		System.out.println("Passed Quote In Test");
 		for (int quoteType = 0; quoteType < quotOutCount.length; quoteType++) {
 			for (int i = 0; i < quotOutCount[quoteType]; i++) {
-				for (int it = 0; it < mat.iterations(groupNameOutQuot(
-						quoteType, i)); it++) {
-					int loc = mat
-							.range(groupNameOutQuot(quoteType, i), it).start;
-					if (segment.quoteTypeMatches(loc, quoteType))
-						return false;
-				}
+				int loc = mat.start(groupNameOutQuot(quoteType, i));
+				if (loc == -1) continue;
+				if (segment.quoteTypeMatches(loc, quoteType)) return false;
 			}
 		}
 		for (int i = 0; i < generalOutCount; i++) {
-			for (int it = 0; it < mat.iterations(groupNameGeneralOut(i)); it++) {
-				int loc = mat.range(groupNameGeneralOut(i), it).start;
-				if (!segment.quoteTypeMatches(loc, -1)) return false;
-			}
+			int loc = mat.start(groupNameGeneralOut(i));
+			if (loc == -1) continue;
+			if (!segment.quoteTypeMatches(loc, -1)) return false;
 		}
 		return true;
 	}

@@ -1277,6 +1277,7 @@ public final class Pattern implements java.io.Serializable {
 	 * Temporary storage used while parsing group references.
 	 */
 	/**
+<<<<<<< HEAD
 	 * Stores a tree of groups. This is part of a major dirty hack
 	 * and should be deleted later. TODO fix the hack
 	 */
@@ -1313,6 +1314,8 @@ public final class Pattern implements java.io.Serializable {
 	}
 	private ArrayList<GroupTree> groups;
 	/**
+=======
+>>>>>>> parent of 98e00ef... OK, done with trying to hack the OpenJDK regex library more than I already have to allow for repeated capturing groups. The new plan is to try to extract the parser and elements of the matcher into a more extensible state so that I can just directly program in the enhancements.
 	 * Temporary null terminated code point array used by pattern compiling.
 	 */
 	private transient CodepointSequence codes;
@@ -1613,8 +1616,7 @@ public final class Pattern implements java.io.Serializable {
 	 * or escape sequences in the input sequence will be given no special
 	 * meaning.
 	 *
-	 * @param s
-	 *        The string to be literalized
+	 * @param s The string to be literalized
 	 * @return A literal string replacement
 	 * @since 1.5
 	 */
@@ -1660,7 +1662,6 @@ public final class Pattern implements java.io.Serializable {
 	 * only a Start node and a LastNode node.
 	 */
 	private Pattern(String p, int f) {
-		groups = new ArrayList<GroupTree>();
 		pattern = p;
 		flags = f;
 		// to use UNICODE_CASE if UNICODE_CHARACTER_CLASS present
@@ -2289,10 +2290,7 @@ public final class Pattern implements java.io.Serializable {
 				case '(':
 					// Because group handles its own closure,
 					// we need to treat it differently
-					int startOfGroup = cursor;
 					node = group0();
-					int endOfGroup = cursor;
-					addGroup(startOfGroup, endOfGroup);
 					// Check for comment or flag group
 					if (node == null) continue;
 					if (head == null)
@@ -2990,7 +2988,6 @@ public final class Pattern implements java.io.Serializable {
 	 * returned in root.
 	 */
 	private Node group0() {
-		int startOfGroup = cursor;
 		boolean capturingGroup = false;
 		Node head = null;
 		Node tail = null;
@@ -3087,8 +3084,6 @@ public final class Pattern implements java.io.Serializable {
 		flags = save;
 		// Check for quantifiers
 		Node node = closure(head);
-		int endOfGroup = cursor;
-		addGroup(startOfGroup, endOfGroup);
 		if (node == head) { // No closure
 			root = tail;
 			return node; // Dual return
@@ -3552,7 +3547,7 @@ public final class Pattern implements java.io.Serializable {
 		 */
 		boolean match(Matcher matcher, int i, CharSequence seq) {
 			matcher.last = i;
-			matcher.set0Group(Range.of(matcher.first, matcher.last));
+			matcher.cacheGroup(0, Range.of(matcher.first, matcher.last));
 			return true;
 		}
 		/**
@@ -3577,7 +3572,7 @@ public final class Pattern implements java.io.Serializable {
 			if (matcher.acceptMode == Matcher.ENDANCHOR && i != matcher.to)
 				return false;
 			matcher.last = i;
-			matcher.set0Group(Range.of(matcher.first, matcher.last));
+			matcher.cacheGroup(0, Range.of(matcher.first, matcher.last));
 			return true;
 		}
 	}
@@ -3605,8 +3600,8 @@ public final class Pattern implements java.io.Serializable {
 			for (; i <= guard; i++) {
 				if (next.match(matcher, i, seq)) {
 					matcher.first = i;
-					matcher.set0Group(Range
-							.of(matcher.first, matcher.last));
+					matcher.cacheGroup(0,
+							Range.of(matcher.first, matcher.last));
 					return true;
 				}
 			}
@@ -3639,8 +3634,8 @@ public final class Pattern implements java.io.Serializable {
 				// if ((ret = next.match(matcher, i, seq)) || i == guard)
 				if (next.match(matcher, i, seq)) {
 					matcher.first = i;
-					matcher.set0Group(Range
-							.of(matcher.first, matcher.last));
+					matcher.cacheGroup(0,
+							Range.of(matcher.first, matcher.last));
 					return true;
 				}
 				if (i == guard) break;
@@ -3668,7 +3663,7 @@ public final class Pattern implements java.io.Serializable {
 			int fromIndex = (matcher.anchoringBounds) ? matcher.from : 0;
 			if (i == fromIndex && next.match(matcher, i, seq)) {
 				matcher.first = i;
-				matcher.set0Group(Range.of(i, matcher.last));
+				matcher.cacheGroup(0, Range.of(i, matcher.last));
 				return true;
 			} else {
 				return false;
@@ -4501,11 +4496,12 @@ public final class Pattern implements java.io.Serializable {
 		}
 		@Override
 		boolean match(Matcher matcher, int i, CharSequence seq) {
+			ArrayList<Range>[] groupsr = matcher.groupsr;
 			int[] locals = matcher.locals;
 			int save0 = locals[localIndex];
-			ArrayList<Range>[] saver = null;
+			ArrayList<Range> saver = new ArrayList<Range>();
 			if (capture) {
-				saver = matcher.cloneOfGroupsr();
+				saver = new ArrayList<>(groupsr[groupIndex / 2]);
 			}
 			// Notify GroupTail there is no need to setup group info
 			// because it will be set here
@@ -4535,7 +4531,7 @@ public final class Pattern implements java.io.Serializable {
 			if (!ret) {
 				locals[localIndex] = save0;
 				if (capture) {
-					matcher.groupsr = saver;
+					groupsr[groupIndex / 2] = saver;
 				}
 			}
 			return ret;
@@ -4556,9 +4552,7 @@ public final class Pattern implements java.io.Serializable {
 					i = i + k;
 					break;
 				}
-				Stack<ArrayList<Range>[]> state = new Stack<>();
 				for (;;) {
-					state.push(matcher.cloneOfGroupsr());
 					if (capture) {
 						matcher.cacheGroup(groupIndex / 2,
 								Range.of(i, i + k));
@@ -4582,11 +4576,8 @@ public final class Pattern implements java.io.Serializable {
 					// backing off
 					i = i - k;
 					if (capture) {
-						// TODO handle recursive checking
-						matcher.parentPattern.groups.get(groupIndex / 2)
-								.removeSingleFromAll(matcher);
-						// matcher.removeGroup(groupIndex / 2);
-						// matcher.groupsr = state.pop();
+						matcher.cacheGroup(groupIndex / 2,
+								Range.of(i - k, i));
 					}
 					j--;
 				}
@@ -4602,7 +4593,7 @@ public final class Pattern implements java.io.Serializable {
 				if (!atom.match(matcher, i, seq)) return false;
 				if (i == matcher.last) return false;
 				if (capture) {
-					matcher.set0Group(Range.of(i, matcher.last));
+					matcher.cacheGroup(0, Range.of(i, matcher.last));
 				}
 				i = matcher.last;
 				j++;
@@ -4615,7 +4606,7 @@ public final class Pattern implements java.io.Serializable {
 					break;
 				}
 				if (capture) {
-					matcher.set0Group(Range.of(i, matcher.last));
+					matcher.cacheGroup(0, Range.of(i, matcher.last));
 				}
 				if (i == matcher.last) {
 					break;
@@ -4802,7 +4793,8 @@ public final class Pattern implements java.io.Serializable {
 				// backs off of a match.
 				matcher.cacheGroup(groupIndex / 2, Range.of(tmp, i));
 				if (next.match(matcher, i, seq)) { return true; }
-				matcher.removeGroup(groupIndex / 2);
+				matcher.groupsr[groupIndex / 2]
+						.remove(matcher.groupsr[groupIndex / 2].size() - 1);;
 				return false;
 			} else {
 				// This is a group reference case. We don't need to save any
@@ -5521,8 +5513,8 @@ public final class Pattern implements java.io.Serializable {
 				boolean ret = next.match(matcher, i + patternLength, seq);
 				if (ret) {
 					matcher.first = i;
-					matcher.set0Group(Range
-							.of(matcher.first, matcher.last));
+					matcher.cacheGroup(0,
+							Range.of(matcher.first, matcher.last));
 					return true;
 				}
 				i++;
@@ -5578,8 +5570,8 @@ public final class Pattern implements java.io.Serializable {
 				boolean ret = next.match(matcher, i + lengthInChars, seq);
 				if (ret) {
 					matcher.first = i;
-					matcher.set0Group(Range
-							.of(matcher.first, matcher.last));
+					matcher.cacheGroup(0,
+							Range.of(matcher.first, matcher.last));
 					return true;
 				}
 				i += countChars(seq, i, 1);
@@ -5965,6 +5957,7 @@ public final class Pattern implements java.io.Serializable {
 				new MatcherIterator(), Spliterator.ORDERED
 						| Spliterator.NONNULL), false);
 	}
+<<<<<<< HEAD
 	/**
 	 * Gets the pattern associated with this group
 	 */
@@ -5972,4 +5965,6 @@ public final class Pattern implements java.io.Serializable {
 		return Pattern.compile(codes.toString(groups.get(group).start,
 				groups.get(group).end - groups.get(group).start));
 	}
+=======
+>>>>>>> parent of 98e00ef... OK, done with trying to hack the OpenJDK regex library more than I already have to allow for repeated capturing groups. The new plan is to try to extract the parser and elements of the matcher into a more extensible state so that I can just directly program in the enhancements.
 }

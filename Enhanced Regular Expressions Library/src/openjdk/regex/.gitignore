@@ -146,5 +146,8 @@
 /Prolog.class
 /Matcher$1.class
 /MatchCache.class
+<<<<<<< HEAD
 /Pattern$GroupTree.class
 /CodepointSequence.class
+=======
+>>>>>>> parent of 98e00ef... OK, done with trying to hack the OpenJDK regex library more than I already have to allow for repeated capturing groups. The new plan is to try to extract the parser and elements of the matcher into a more extensible state so that I can just directly program in the enhancements.
