@@ -1291,11 +1291,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	 * Index into the pattern string that keeps track of how much has been
 	 * parsed.
 	 */
-	private transient PatternPosition cursorPos;
-	/**
-	 * Holds the length of the pattern string.
-	 */
-	private transient int patternLength;
+	private transient CodePointSequence codepoints;
 	/**
 	 * If the Start node might possibly match supplementary characters.
 	 * It is set to true during compiling if
@@ -1607,8 +1603,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 			throws java.io.IOException, ClassNotFoundException {
 		// Read in all fields
 		s.defaultReadObject();
-		cursorPos = new PatternPosition(this::getPatternLength,
-				this::setPatternLength, this::getFlags, 0, this);
+		codepoints = new CodePointSequence(this::getFlags, 0, this);
 		// Initialize counts
 		capturingGroupCount = 1;
 		localCount = 0;
@@ -1634,20 +1629,13 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		// Reset group index count
 		capturingGroupCount = 1;
 		localCount = 0;
-		cursorPos = new PatternPosition(this::getPatternLength,
-				this::setPatternLength, this::getFlags, 0, this);
+		codepoints = new CodePointSequence(this::getFlags, 0, this);
 		if (pattern.length() > 0) {
 			compile();
 		} else {
 			root = new Start(lastAccept);
 			matchRoot = lastAccept;
 		}
-	}
-	private int getPatternLength() {
-		return patternLength;
-	}
-	private void setPatternLength(int patternLength) {
-		this.patternLength = patternLength;
 	}
 	private int getFlags() {
 		return flags;
@@ -1661,10 +1649,10 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		// Convert pattern into normalizedD form
 		normalizedPattern = Normalizer
 				.normalize(pattern, Normalizer.Form.NFD);
-		patternLength = normalizedPattern.length();
+		codepoints.patternLength = normalizedPattern.length();
 		// Modify pattern to match canonical equivalences
-		StringBuilder newPattern = new StringBuilder(patternLength);
-		for (int i = 0; i < patternLength;) {
+		StringBuilder newPattern = new StringBuilder(codepoints.patternLength);
+		for (int i = 0; i < codepoints.patternLength;) {
 			int c = normalizedPattern.codePointAt(i);
 			StringBuilder sequenceBuffer;
 			if ((Character.getType(c) == Character.NON_SPACING_MARK)
@@ -1674,7 +1662,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 				sequenceBuffer.appendCodePoint(c);
 				while (Character.getType(c) == Character.NON_SPACING_MARK) {
 					i += Character.charCount(c);
-					if (i >= patternLength) break;
+					if (i >= codepoints.patternLength) break;
 					c = normalizedPattern.codePointAt(i);
 					sequenceBuffer.appendCodePoint(c);
 				}
@@ -1859,37 +1847,38 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		} else {
 			normalizedPattern = pattern;
 		}
-		patternLength = normalizedPattern.length();
+		codepoints.patternLength = normalizedPattern.length();
 		// Copy pattern to int array for convenience
 		// Use double zero to terminate pattern
-		cursorPos.temp = new int[patternLength + 2];
+		codepoints.temp = new int[codepoints.patternLength + 2];
 		hasSupplementary = false;
 		int c, count = 0;
 		// Convert all chars into code points
-		for (int x = 0; x < patternLength; x += Character.charCount(c)) {
+		for (int x = 0; x < codepoints.patternLength; x += Character
+				.charCount(c)) {
 			c = normalizedPattern.codePointAt(x);
 			if (isSupplementary(c)) {
 				hasSupplementary = true;
 			}
-			cursorPos.temp[count++] = c;
+			codepoints.temp[count++] = c;
 		}
-		patternLength = count; // patternLength now in code points
-		if (!has(LITERAL)) cursorPos.RemoveQEQuoting();
+		codepoints.patternLength = count; // patternLength now in code points
+		if (!has(LITERAL)) codepoints.RemoveQEQuoting();
 		// Allocate all temporary objects here.
 		buffer = new int[32];
 		groupNodes = new GroupHead[10];
 		namedGroups = null;
 		if (has(LITERAL)) {
 			// Literal pattern handling
-			matchRoot = newSlice(cursorPos.temp, patternLength,
+			matchRoot = newSlice(codepoints.temp, codepoints.patternLength,
 					hasSupplementary);
 			matchRoot.next = lastAccept;
 		} else {
 			// Start recursive descent parsing
 			matchRoot = expr(lastAccept);
 			// Check extra pattern characters
-			if (patternLength != cursorPos.cursor) {
-				if (cursorPos.peek() == ')') {
+			if (codepoints.patternLength != codepoints.cursor) {
+				if (codepoints.peek() == ')') {
 					throw error("Unmatched closing ')'");
 				} else {
 					throw error("Unexpected internal error");
@@ -1910,10 +1899,10 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 					matchRoot);
 		}
 		// Release temporary storage
-		cursorPos.temp = null;
+		codepoints.temp = null;
 		buffer = null;
 		groupNodes = null;
-		patternLength = 0;
+		codepoints.patternLength = 0;
 		compiled = true;
 	}
 	Map<String, Integer> namedGroups() {
@@ -2000,7 +1989,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	@Override
 	public PatternSyntaxException error(String s) {
 		return new PatternSyntaxException(s, normalizedPattern,
-				cursorPos.cursor - 1);
+				codepoints.cursor - 1);
 	}
 	/**
 	 * Determines if there is any supplementary character or unpaired
@@ -2008,7 +1997,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	 */
 	private boolean findSupplementary(int start, int end) {
 		for (int i = start; i < end; i++) {
-			if (isSupplementary(cursorPos.temp[i])) return true;
+			if (isSupplementary(codepoints.temp[i])) return true;
 		}
 		return false;
 	}
@@ -2070,8 +2059,8 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 					prev = branch = new Branch(prev, node, branchConn);
 				}
 			}
-			if (cursorPos.peek() != '|') { return prev; }
-			cursorPos.next();
+			if (codepoints.peek() != '|') { return prev; }
+			codepoints.next();
 		}
 	}
 	@SuppressWarnings("fallthrough")
@@ -2083,7 +2072,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		Node tail = null;
 		Node node = null;
 		LOOP: for (;;) {
-			int ch = cursorPos.peek();
+			int ch = codepoints.peek();
 			switch (ch) {
 				case '(':
 					// Because group handles its own closure,
@@ -2101,24 +2090,24 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 					node = clazz(true);
 					break;
 				case '\\':
-					ch = cursorPos.nextEscaped();
+					ch = codepoints.nextEscaped();
 					if (ch == 'p' || ch == 'P') {
 						boolean oneLetter = true;
 						boolean comp = (ch == 'P');
-						ch = cursorPos.next(); // Consume { if present
+						ch = codepoints.next(); // Consume { if present
 						if (ch != '{') {
-							cursorPos.unread();
+							codepoints.unread();
 						} else {
 							oneLetter = false;
 						}
 						node = family(oneLetter, comp);
 					} else {
-						cursorPos.unread();
+						codepoints.unread();
 						node = atom();
 					}
 					break;
 				case '^':
-					cursorPos.next();
+					codepoints.next();
 					if (has(MULTILINE)) {
 						if (has(UNIX_LINES))
 							node = new UnixCaret();
@@ -2128,13 +2117,13 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 					}
 					break;
 				case '$':
-					cursorPos.next();
+					codepoints.next();
 					if (has(UNIX_LINES))
 						node = new UnixDollar(has(MULTILINE));
 					else node = new Dollar(has(MULTILINE));
 					break;
 				case '.':
-					cursorPos.next();
+					codepoints.next();
 					if (has(DOTALL)) {
 						node = new All();
 					} else {
@@ -2155,11 +2144,11 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 				case '?':
 				case '*':
 				case '+':
-					cursorPos.next();
+					codepoints.next();
 					throw error("Dangling meta character '" + ((char) ch)
 							+ "'");
 				case 0:
-					if (cursorPos.cursor >= patternLength) {
+					if (codepoints.cursor >= codepoints.patternLength) {
 						break LOOP;
 					}
 					// Fall through
@@ -2188,7 +2177,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		int first = 0;
 		int prev = -1;
 		boolean hasSupplementary = false;
-		int ch = cursorPos.peek();
+		int ch = codepoints.peek();
 		for (;;) {
 			switch (ch) {
 				case '*':
@@ -2196,7 +2185,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 				case '?':
 				case '{':
 					if (first > 1) {
-						cursorPos.cursor = prev; // Unwind one character
+						codepoints.cursor = prev; // Unwind one character
 						first--;
 					}
 					break;
@@ -2209,25 +2198,25 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 				case ')':
 					break;
 				case '\\':
-					ch = cursorPos.nextEscaped();
+					ch = codepoints.nextEscaped();
 					if (ch == 'p' || ch == 'P') { // Property
 						if (first > 0) { // Slice is waiting; handle it
 										// first
-							cursorPos.unread();
+							codepoints.unread();
 							break;
 						} else { // No slice; just return the family node
 							boolean comp = (ch == 'P');
 							boolean oneLetter = true;
-							ch = cursorPos.next(); // Consume { if
+							ch = codepoints.next(); // Consume { if
 												// present
 							if (ch != '{')
-								cursorPos.unread();
+								codepoints.unread();
 							else oneLetter = false;
 							return family(oneLetter, comp);
 						}
 					}
-					cursorPos.unread();
-					prev = cursorPos.cursor;
+					codepoints.unread();
+					prev = codepoints.cursor;
 					ch = escape(false, first == 0, false);
 					if (ch >= 0) {
 						append(ch, first);
@@ -2235,25 +2224,25 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 						if (isSupplementary(ch)) {
 							hasSupplementary = true;
 						}
-						ch = cursorPos.peek();
+						ch = codepoints.peek();
 						continue;
 					} else if (first == 0) { return root; }
 					// Unwind meta escape sequence
-					cursorPos.cursor = prev;
+					codepoints.cursor = prev;
 					break;
 				case 0:
-					if (cursorPos.cursor >= patternLength) {
+					if (codepoints.cursor >= codepoints.patternLength) {
 						break;
 					}
 					// Fall through
 				default:
-					prev = cursorPos.cursor;
+					prev = codepoints.cursor;
 					append(ch, first);
 					first++;
 					if (isSupplementary(ch)) {
 						hasSupplementary = true;
 					}
-					ch = cursorPos.next();
+					ch = codepoints.next();
 					continue;
 			}
 			break;
@@ -2281,7 +2270,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	private Node ref(int refNum) {
 		boolean done = false;
 		while (!done) {
-			int ch = cursorPos.peek();
+			int ch = codepoints.peek();
 			switch (ch) {
 				case '0':
 				case '1':
@@ -2301,7 +2290,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 						break;
 					}
 					refNum = newRefNum;
-					cursorPos.read();
+					codepoints.read();
 					break;
 				default:
 					done = true;
@@ -2321,10 +2310,10 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	 * matches the escape sequence.
 	 */
 	private int escape(boolean inclass, boolean create, boolean isrange) {
-		int ch = cursorPos.skip();
+		int ch = codepoints.skip();
 		switch (ch) {
 			case '0':
-				return cursorPos.o();
+				return codepoints.o();
 			case '1':
 			case '2':
 			case '3':
@@ -2419,7 +2408,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 							has(UNICODE_CHARACTER_CLASS));
 				return -1;
 			case 'c':
-				return cursorPos.c();
+				return codepoints.c();
 			case 'd':
 				if (create)
 					root = has(UNICODE_CHARACTER_CLASS) ? new Utype(
@@ -2439,9 +2428,9 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 				break;
 			case 'k':
 				if (inclass) break;
-				if (cursorPos.read() != '<')
+				if (codepoints.read() != '<')
 					throw error("\\k is not followed by '<' for named capturing group");
-				String name = groupname(cursorPos.read());
+				String name = groupname(codepoints.read());
 				if (!namedGroups().containsKey(name))
 					throw error("(named capturing group <" + name
 							+ "> does not exit");
@@ -2472,7 +2461,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 			case 't':
 				return '\t';
 			case 'u':
-				return cursorPos.u();
+				return codepoints.u();
 			case 'v':
 				// '\v' was implemented as VT/0x0B in releases < 1.8 (though
 				// undocumented). In JDK8 '\v' is specified as a predefined
@@ -2491,7 +2480,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 							UnicodeProp.WORD) : new Ctype(ASCII.WORD);
 				return -1;
 			case 'x':
-				return cursorPos.x();
+				return codepoints.x();
 			case 'y':
 				break;
 			case 'z':
@@ -2509,55 +2498,55 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	 * Prev could be a single or a group, so it could be a chain of nodes.
 	 */
 	private Node closure(Node prev) {
-		int ch = cursorPos.peek();
+		int ch = codepoints.peek();
 		switch (ch) {
 			case '?':
-				ch = cursorPos.next();
+				ch = codepoints.next();
 				if (ch == '?') {
-					cursorPos.next();
+					codepoints.next();
 					return new Ques(prev, LAZY);
 				} else if (ch == '+') {
-					cursorPos.next();
+					codepoints.next();
 					return new Ques(prev, POSSESSIVE);
 				}
 				return new Ques(prev, GREEDY);
 			case '*':
-				ch = cursorPos.next();
+				ch = codepoints.next();
 				if (ch == '?') {
-					cursorPos.next();
+					codepoints.next();
 					return new Curly(prev, 0, MAX_REPS, LAZY);
 				} else if (ch == '+') {
-					cursorPos.next();
+					codepoints.next();
 					return new Curly(prev, 0, MAX_REPS, POSSESSIVE);
 				}
 				return new Curly(prev, 0, MAX_REPS, GREEDY);
 			case '+':
-				ch = cursorPos.next();
+				ch = codepoints.next();
 				if (ch == '?') {
-					cursorPos.next();
+					codepoints.next();
 					return new Curly(prev, 1, MAX_REPS, LAZY);
 				} else if (ch == '+') {
-					cursorPos.next();
+					codepoints.next();
 					return new Curly(prev, 1, MAX_REPS, POSSESSIVE);
 				}
 				return new Curly(prev, 1, MAX_REPS, GREEDY);
 			case '{':
-				ch = cursorPos.temp[cursorPos.cursor + 1];
+				ch = codepoints.temp[codepoints.cursor + 1];
 				if (ASCII.isDigit(ch)) {
-					cursorPos.skip();
+					codepoints.skip();
 					int cmin = 0;
 					do {
 						cmin = cmin * 10 + (ch - '0');
-					} while (ASCII.isDigit(ch = cursorPos.read()));
+					} while (ASCII.isDigit(ch = codepoints.read()));
 					int cmax = cmin;
 					if (ch == ',') {
-						ch = cursorPos.read();
+						ch = codepoints.read();
 						cmax = MAX_REPS;
 						if (ch != '}') {
 							cmax = 0;
 							while (ASCII.isDigit(ch)) {
 								cmax = cmax * 10 + (ch - '0');
-								ch = cursorPos.read();
+								ch = codepoints.read();
 							}
 						}
 					}
@@ -2566,12 +2555,12 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 					if (((cmin) | (cmax) | (cmax - cmin)) < 0)
 						throw error("Illegal repetition range");
 					Curly curly;
-					ch = cursorPos.peek();
+					ch = codepoints.peek();
 					if (ch == '?') {
-						cursorPos.next();
+						codepoints.next();
 						curly = new Curly(prev, cmin, cmax, LAZY);
 					} else if (ch == '+') {
-						cursorPos.next();
+						codepoints.next();
 						curly = new Curly(prev, cmin, cmax, POSSESSIVE);
 					} else {
 						curly = new Curly(prev, cmin, cmax, GREEDY);
@@ -2596,15 +2585,15 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		BitClass bits = new BitClass();
 		boolean include = true;
 		boolean firstInClass = true;
-		int ch = cursorPos.next();
+		int ch = codepoints.next();
 		for (;;) {
 			switch (ch) {
 				case '^':
 					// Negates if first char in a class, otherwise literal
 					if (firstInClass) {
-						if (cursorPos.temp[cursorPos.cursor - 1] != '[')
+						if (codepoints.temp[codepoints.cursor - 1] != '[')
 							break;
-						ch = cursorPos.next();
+						ch = codepoints.next();
 						include = !include;
 						continue;
 					} else {
@@ -2617,13 +2606,13 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 					if (prev == null)
 						prev = node;
 					else prev = union(prev, node);
-					ch = cursorPos.peek();
+					ch = codepoints.peek();
 					continue;
 				case '&':
 					firstInClass = false;
-					ch = cursorPos.next();
+					ch = codepoints.next();
 					if (ch == '&') {
-						ch = cursorPos.next();
+						ch = codepoints.next();
 						CharProperty rightNode = null;
 						while (ch != ']' && ch != '&') {
 							if (ch == '[') {
@@ -2632,10 +2621,10 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 								else rightNode = union(rightNode,
 										clazz(true));
 							} else { // abc&&def
-								cursorPos.unread();
+								codepoints.unread();
 								rightNode = clazz(false);
 							}
-							ch = cursorPos.peek();
+							ch = codepoints.peek();
 						}
 						if (rightNode != null) node = rightNode;
 						if (prev == null) {
@@ -2647,19 +2636,19 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 						}
 					} else {
 						// treat as a literal &
-						cursorPos.unread();
+						codepoints.unread();
 						break;
 					}
 					continue;
 				case 0:
 					firstInClass = false;
-					if (cursorPos.cursor >= patternLength)
+					if (codepoints.cursor >= codepoints.patternLength)
 						throw error("Unclosed character class");
 					break;
 				case ']':
 					firstInClass = false;
 					if (prev != null) {
-						if (consume) cursorPos.next();
+						if (consume) codepoints.next();
 						return prev;
 					}
 					break;
@@ -2681,7 +2670,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 					if (prev != node) prev = setDifference(prev, node);
 				}
 			}
-			ch = cursorPos.peek();
+			ch = codepoints.peek();
 		}
 	}
 	private CharProperty bitsOrSingle(BitClass bits, int ch) {
@@ -2701,38 +2690,38 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	 * and return its representative node.
 	 */
 	private CharProperty range(BitClass bits) {
-		int ch = cursorPos.peek();
+		int ch = codepoints.peek();
 		if (ch == '\\') {
-			ch = cursorPos.nextEscaped();
+			ch = codepoints.nextEscaped();
 			if (ch == 'p' || ch == 'P') { // A property
 				boolean comp = (ch == 'P');
 				boolean oneLetter = true;
 				// Consume { if present
-				ch = cursorPos.next();
+				ch = codepoints.next();
 				if (ch != '{')
-					cursorPos.unread();
+					codepoints.unread();
 				else oneLetter = false;
 				return family(oneLetter, comp);
 			} else { // ordinary escape
-				boolean isrange = cursorPos.temp[cursorPos.cursor + 1] == '-';
-				cursorPos.unread();
+				boolean isrange = codepoints.temp[codepoints.cursor + 1] == '-';
+				codepoints.unread();
 				ch = escape(true, true, isrange);
 				if (ch == -1) return (CharProperty) root;
 			}
 		} else {
-			cursorPos.next();
+			codepoints.next();
 		}
 		if (ch >= 0) {
-			if (cursorPos.peek() == '-') {
-				int endRange = cursorPos.temp[cursorPos.cursor + 1];
+			if (codepoints.peek() == '-') {
+				int endRange = codepoints.temp[codepoints.cursor + 1];
 				if (endRange == '[') { return bitsOrSingle(bits, ch); }
 				if (endRange != ']') {
-					cursorPos.next();
-					int m = cursorPos.peek();
+					codepoints.next();
+					int m = codepoints.peek();
 					if (m == '\\') {
 						m = escape(true, false, true);
 					} else {
-						cursorPos.next();
+						codepoints.next();
 					}
 					if (m < ch) { throw error("Illegal character range"); }
 					if (has(CASE_INSENSITIVE))
@@ -2748,26 +2737,27 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	 * Parses a Unicode character family and returns its representative node.
 	 */
 	private CharProperty family(boolean singleLetter, boolean maybeComplement) {
-		cursorPos.next();
+		codepoints.next();
 		String name;
 		CharProperty node = null;
 		if (singleLetter) {
-			int c = cursorPos.temp[cursorPos.cursor];
+			int c = codepoints.temp[codepoints.cursor];
 			if (!Character.isSupplementaryCodePoint(c)) {
 				name = String.valueOf((char) c);
 			} else {
-				name = new String(cursorPos.temp, cursorPos.cursor, 1);
+				name = new String(codepoints.temp, codepoints.cursor, 1);
 			}
-			cursorPos.read();
+			codepoints.read();
 		} else {
-			int i = cursorPos.cursor;
-			cursorPos.mark('}');
-			while (cursorPos.read() != '}') {}
-			cursorPos.mark('\000');
-			int j = cursorPos.cursor;
-			if (j > patternLength) throw error("Unclosed character family");
+			int i = codepoints.cursor;
+			codepoints.mark('}');
+			while (codepoints.read() != '}') {}
+			codepoints.mark('\000');
+			int j = codepoints.cursor;
+			if (j > codepoints.patternLength)
+				throw error("Unclosed character family");
 			if (i + 1 >= j) throw error("Empty character family");
-			name = new String(cursorPos.temp, i, j - i - 1);
+			name = new String(codepoints.temp, i, j - i - 1);
 		}
 		int i = name.indexOf('=');
 		if (i != -1) {
@@ -2852,7 +2842,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	private String groupname(int ch) {
 		StringBuilder sb = new StringBuilder();
 		sb.append(Character.toChars(ch));
-		while (ASCII.isLower(ch = cursorPos.read()) || ASCII.isUpper(ch)
+		while (ASCII.isLower(ch = codepoints.read()) || ASCII.isUpper(ch)
 				|| ASCII.isDigit(ch)) {
 			sb.append(Character.toChars(ch));
 		}
@@ -2873,9 +2863,9 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		Node tail = null;
 		int save = flags;
 		root = null;
-		int ch = cursorPos.next();
+		int ch = codepoints.next();
 		if (ch == '?') {
-			ch = cursorPos.skip();
+			ch = codepoints.skip();
 			switch (ch) {
 				case ':': // (?:xxx) pure group
 					head = createGroup(true);
@@ -2900,7 +2890,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 					head = tail = new Ques(head, INDEPENDENT);
 					break;
 				case '<': // (?<xxx) look behind
-					ch = cursorPos.read();
+					ch = codepoints.read();
 					if (ASCII.isLower(ch) || ASCII.isUpper(ch)) {
 						// named captured group
 						String name = groupname(ch);
@@ -2914,7 +2904,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 						head.next = expr(tail);
 						break;
 					}
-					int start = cursorPos.cursor;
+					int start = codepoints.cursor;
 					head = createGroup(true);
 					tail = root;
 					head.next = expr(tail);
@@ -2924,7 +2914,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 					if (info.maxValid == false) { throw error("Look-behind group does not have "
 							+ "an obvious maximum length"); }
 					boolean hasSupplementary = findSupplementary(start,
-							patternLength);
+							codepoints.patternLength);
 					if (ch == '=') {
 						head = tail = (hasSupplementary ? new BehindS(
 								head, info.maxLength, info.minLength)
@@ -2943,9 +2933,9 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 				case '@':
 					throw error("Unknown group type");
 				default: // (?xxx:) inlined match flags
-					cursorPos.unread();
+					codepoints.unread();
 					addFlag();
-					ch = cursorPos.read();
+					ch = codepoints.read();
 					if (ch == ')') { return null; // Inline modifier only
 					}
 					if (ch != ':') { throw error("Unknown inline modifier"); }
@@ -2960,7 +2950,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 			tail = root;
 			head.next = expr(tail);
 		}
-		cursorPos.accept(')', "Unclosed group");
+		codepoints.accept(')', "Unclosed group");
 		flags = save;
 		// Check for quantifiers
 		Node node = closure(head);
@@ -3039,7 +3029,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	 * Parses inlined match flags and set them appropriately.
 	 */
 	private void addFlag() {
-		int ch = cursorPos.peek();
+		int ch = codepoints.peek();
 		for (;;) {
 			switch (ch) {
 				case 'i':
@@ -3067,12 +3057,12 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 					flags |= (UNICODE_CHARACTER_CLASS | UNICODE_CASE);
 					break;
 				case '-': // subFlag then fall through
-					ch = cursorPos.next();
+					ch = codepoints.next();
 					subFlag();
 				default:
 					return;
 			}
-			ch = cursorPos.next();
+			ch = codepoints.next();
 		}
 	}
 	@SuppressWarnings("fallthrough")
@@ -3081,7 +3071,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	 * flags appropriately.
 	 */
 	private void subFlag() {
-		int ch = cursorPos.peek();
+		int ch = codepoints.peek();
 		for (;;) {
 			switch (ch) {
 				case 'i':
@@ -3110,7 +3100,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 				default:
 					return;
 			}
-			ch = cursorPos.next();
+			ch = codepoints.next();
 		}
 	}
 	static final int MAX_REPS = 0x7FFFFFFF;

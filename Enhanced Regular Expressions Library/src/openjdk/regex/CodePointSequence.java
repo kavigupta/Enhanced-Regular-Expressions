@@ -4,21 +4,19 @@ import static openjdk.regex.Pattern.COMMENTS;
 import static openjdk.regex.Pattern.UNIX_LINES;
 
 import java.util.Arrays;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-public class PatternPosition {
+public class CodePointSequence {
 	int[] temp;
-	final Supplier<Integer> patternLengthS;
-	final Consumer<Integer> patternLengthC;
-	final Supplier<Integer> flags;
-	final ErrorProvider errors;
+	/**
+	 * Holds the length of the pattern string.
+	 */
+	transient int patternLength;
+	private final Supplier<Integer> flags;
+	private final ErrorProvider errors;
 	int cursor;
-	public PatternPosition(Supplier<Integer> patternLengthS,
-			Consumer<Integer> patternLengthC, Supplier<Integer> flags,
-			int cursor, ErrorProvider errors) {
-		this.patternLengthS = patternLengthS;
-		this.patternLengthC = patternLengthC;
+	public CodePointSequence(Supplier<Integer> flags, int cursor,
+			ErrorProvider errors) {
 		this.flags = flags;
 		this.cursor = cursor;
 		this.errors = errors;
@@ -28,7 +26,7 @@ public class PatternPosition {
 	 * See the description of `quotemeta' in perlfunc(1).
 	 */
 	void RemoveQEQuoting() {
-		final int pLen = patternLengthS.get();
+		final int pLen = patternLength;
 		int i = 0;
 		while (i < pLen - 1) {
 			if (temp[i] != '\\')
@@ -85,14 +83,14 @@ public class PatternPosition {
 			}
 			beginQuote = false;
 		}
-		patternLengthC.accept(j);
+		patternLength = j;
 		temp = Arrays.copyOf(newtemp, j + 2); // double zero termination
 	}
 	/**
 	 * Mark the end of pattern with a specific character.
 	 */
 	void mark(int c) {
-		temp[patternLengthS.get()] = c;
+		temp[patternLength] = c;
 	}
 	/**
 	 * Peek the next character, and do not advance the cursor.
@@ -139,7 +137,7 @@ public class PatternPosition {
 	 * Utility method for parsing control escape sequences.
 	 */
 	int c() {
-		if (cursor < patternLengthS.get()) { return read() ^ 64; }
+		if (cursor < patternLength) { return read() ^ 64; }
 		throw errors.error("Illegal control escape sequence");
 	}
 	/**
