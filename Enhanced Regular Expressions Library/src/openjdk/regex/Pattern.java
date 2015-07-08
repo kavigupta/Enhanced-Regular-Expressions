@@ -24,11 +24,50 @@
  */
 package openjdk.regex;
 
-import java.text.Normalizer;
 import java.util.*;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+
+import openjdk.regex.CharProperty.All;
+import openjdk.regex.CharProperty.Dot;
+import openjdk.regex.CharProperty.Single;
+import openjdk.regex.CharProperty.SingleI;
+import openjdk.regex.CharProperty.SingleS;
+import openjdk.regex.CharProperty.SingleU;
+import openjdk.regex.CharProperty.UnixDot;
+import openjdk.regex.Node.Begin;
+import openjdk.regex.Node.Behind;
+import openjdk.regex.Node.BehindS;
+import openjdk.regex.Node.BnM;
+import openjdk.regex.Node.Branch;
+import openjdk.regex.Node.BranchConn;
+import openjdk.regex.Node.Caret;
+import openjdk.regex.Node.Curly;
+import openjdk.regex.Node.Dollar;
+import openjdk.regex.Node.First;
+import openjdk.regex.Node.GroupCurly;
+import openjdk.regex.Node.GroupHead;
+import openjdk.regex.Node.GroupTail;
+import openjdk.regex.Node.LastNode;
+import openjdk.regex.Node.LazyLoop;
+import openjdk.regex.Node.Loop;
+import openjdk.regex.Node.Neg;
+import openjdk.regex.Node.NotBehind;
+import openjdk.regex.Node.NotBehindS;
+import openjdk.regex.Node.Pos;
+import openjdk.regex.Node.Prolog;
+import openjdk.regex.Node.Ques;
+import openjdk.regex.Node.Slice;
+import openjdk.regex.Node.SliceI;
+import openjdk.regex.Node.SliceIS;
+import openjdk.regex.Node.SliceS;
+import openjdk.regex.Node.SliceU;
+import openjdk.regex.Node.SliceUS;
+import openjdk.regex.Node.Start;
+import openjdk.regex.Node.StartS;
+import openjdk.regex.Node.UnixCaret;
+import openjdk.regex.Node.UnixDollar;
 
 /**
  * A compiled representation of a regular expression.
@@ -1080,7 +1119,7 @@ import java.util.stream.StreamSupport;
  * @since 1.4
  * @spec JSR-51
  */
-public final class Pattern implements java.io.Serializable, ErrorProvider {
+public final class Pattern implements java.io.Serializable {
 	/**
 	 * Regular expression modifier values. Instead of being passed as
 	 * arguments, they can also be passed as inline modifiers.
@@ -1232,6 +1271,8 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	 */
 	/** use serialVersionUID from Merlin b59 for interoperability */
 	private static final long serialVersionUID = 5073258162644648461L;
+	transient GroupRegistry registry;
+	transient UnprocessedPattern unproc;
 	/**
 	 * The original regular-expression pattern string.
 	 *
@@ -1250,55 +1291,16 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	 */
 	private transient volatile boolean compiled = false;
 	/**
-	 * The normalized pattern string.
-	 */
-	private transient String normalizedPattern;
-	/**
-	 * The starting point of state machine for the find operation. This allows
-	 * a match to start anywhere in the input.
-	 */
-	transient Node root;
-	/**
 	 * The root of object tree for a match operation. The pattern is matched
 	 * at the beginning. This may include a find that uses BnM or a First
 	 * node.
 	 */
 	transient Node matchRoot;
 	/**
-	 * Temporary storage used by parsing pattern slice.
-	 */
-	transient int[] buffer;
-	/**
-	 * Map the "name" of the "named capturing group" to its group id
-	 * node.
-	 */
-	transient volatile Map<String, Integer> namedGroups;
-	/**
-	 * Temporary storage used while parsing group references.
-	 */
-	transient GroupHead[] groupNodes;
-	/**
-	 * The number of capturing groups in this Pattern. Used by matchers to
-	 * allocate storage needed to perform a match.
-	 */
-	transient int capturingGroupCount;
-	/**
 	 * The local variable count used by parsing tree. Used by matchers to
 	 * allocate storage needed to perform a match.
 	 */
 	transient int localCount;
-	/**
-	 * Index into the pattern string that keeps track of how much has been
-	 * parsed.
-	 */
-	private transient CodePointSequence codepoints;
-	/**
-	 * If the Start node might possibly match supplementary characters.
-	 * It is set to true during compiling if
-	 * (1) There is supplementary char in pattern, or
-	 * (2) There is complement node of Category or Block
-	 */
-	private transient boolean hasSupplementary;
 	/**
 	 * Compiles the given regular expression into a pattern.
 	 *
@@ -1603,14 +1605,14 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 			throws java.io.IOException, ClassNotFoundException {
 		// Read in all fields
 		s.defaultReadObject();
-		codepoints = new CodePointSequence(this::getFlags, 0, this);
 		// Initialize counts
-		capturingGroupCount = 1;
+		unproc = new UnprocessedPattern(this::flags, registry);
+		registry = new GroupRegistry();
 		localCount = 0;
 		// if length > 0, the Pattern is lazily compiled
 		compiled = false;
 		if (pattern.length() == 0) {
-			root = new Start(lastAccept);
+			unproc.root = new Start(lastAccept);
 			matchRoot = lastAccept;
 			compiled = true;
 		}
@@ -1627,213 +1629,14 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		// to use UNICODE_CASE if UNICODE_CHARACTER_CLASS present
 		if ((flags & UNICODE_CHARACTER_CLASS) != 0) flags |= UNICODE_CASE;
 		// Reset group index count
-		capturingGroupCount = 1;
+		registry = new GroupRegistry();
+		unproc = new UnprocessedPattern(this::flags, registry);
 		localCount = 0;
-		codepoints = new CodePointSequence(this::getFlags, 0, this);
 		if (pattern.length() > 0) {
 			compile();
 		} else {
-			root = new Start(lastAccept);
+			unproc.root = new Start(lastAccept);
 			matchRoot = lastAccept;
-		}
-	}
-	private int getFlags() {
-		return flags;
-	}
-	/**
-	 * The pattern is converted to normalizedD form and then a pure group
-	 * is constructed to match canonical equivalences of the characters.
-	 */
-	private void normalize() {
-		int lastCodePoint = -1;
-		// Convert pattern into normalizedD form
-		normalizedPattern = Normalizer
-				.normalize(pattern, Normalizer.Form.NFD);
-		codepoints.patternLength = normalizedPattern.length();
-		// Modify pattern to match canonical equivalences
-		StringBuilder newPattern = new StringBuilder(codepoints.patternLength);
-		for (int i = 0; i < codepoints.patternLength;) {
-			int c = normalizedPattern.codePointAt(i);
-			StringBuilder sequenceBuffer;
-			if ((Character.getType(c) == Character.NON_SPACING_MARK)
-					&& (lastCodePoint != -1)) {
-				sequenceBuffer = new StringBuilder();
-				sequenceBuffer.appendCodePoint(lastCodePoint);
-				sequenceBuffer.appendCodePoint(c);
-				while (Character.getType(c) == Character.NON_SPACING_MARK) {
-					i += Character.charCount(c);
-					if (i >= codepoints.patternLength) break;
-					c = normalizedPattern.codePointAt(i);
-					sequenceBuffer.appendCodePoint(c);
-				}
-				String ea = produceEquivalentAlternation(sequenceBuffer
-						.toString());
-				newPattern.setLength(newPattern.length()
-						- Character.charCount(lastCodePoint));
-				newPattern.append("(?:").append(ea).append(")");
-			} else if (c == '[' && lastCodePoint != '\\') {
-				i = normalizeCharClass(newPattern, i);
-			} else {
-				newPattern.appendCodePoint(c);
-			}
-			lastCodePoint = c;
-			i += Character.charCount(c);
-		}
-		normalizedPattern = newPattern.toString();
-	}
-	/**
-	 * Complete the character class being parsed and add a set
-	 * of alternations to it that will match the canonical equivalences
-	 * of the characters within the class.
-	 */
-	private int normalizeCharClass(StringBuilder newPattern, int i) {
-		StringBuilder charClass = new StringBuilder();
-		StringBuilder eq = null;
-		int lastCodePoint = -1;
-		String result;
-		i++;
-		charClass.append("[");
-		while (true) {
-			int c = normalizedPattern.codePointAt(i);
-			StringBuilder sequenceBuffer;
-			if (c == ']' && lastCodePoint != '\\') {
-				charClass.append((char) c);
-				break;
-			} else if (Character.getType(c) == Character.NON_SPACING_MARK) {
-				sequenceBuffer = new StringBuilder();
-				sequenceBuffer.appendCodePoint(lastCodePoint);
-				while (Character.getType(c) == Character.NON_SPACING_MARK) {
-					sequenceBuffer.appendCodePoint(c);
-					i += Character.charCount(c);
-					if (i >= normalizedPattern.length()) break;
-					c = normalizedPattern.codePointAt(i);
-				}
-				String ea = produceEquivalentAlternation(sequenceBuffer
-						.toString());
-				charClass.setLength(charClass.length()
-						- Character.charCount(lastCodePoint));
-				if (eq == null) eq = new StringBuilder();
-				eq.append('|');
-				eq.append(ea);
-			} else {
-				charClass.appendCodePoint(c);
-				i++;
-			}
-			if (i == normalizedPattern.length())
-				throw error("Unclosed character class");
-			lastCodePoint = c;
-		}
-		if (eq != null) {
-			result = "(?:" + charClass.toString() + eq.toString() + ")";
-		} else {
-			result = charClass.toString();
-		}
-		newPattern.append(result);
-		return i;
-	}
-	/**
-	 * Given a specific sequence composed of a regular character and
-	 * combining marks that follow it, produce the alternation that will
-	 * match all canonical equivalences of that sequence.
-	 */
-	private String produceEquivalentAlternation(String source) {
-		int len = countChars(source, 0, 1);
-		if (source.length() == len)
-		// source has one character.
-			return source;
-		String base = source.substring(0, len);
-		String combiningMarks = source.substring(len);
-		String[] perms = producePermutations(combiningMarks);
-		StringBuilder result = new StringBuilder(source);
-		// Add combined permutations
-		for (int x = 0; x < perms.length; x++) {
-			String next = base + perms[x];
-			if (x > 0) result.append("|" + next);
-			next = composeOneStep(next);
-			if (next != null)
-				result.append("|" + produceEquivalentAlternation(next));
-		}
-		return result.toString();
-	}
-	/**
-	 * Returns an array of strings that have all the possible
-	 * permutations of the characters in the input string.
-	 * This is used to get a list of all possible orderings
-	 * of a set of combining marks. Note that some of the permutations
-	 * are invalid because of combining class collisions, and these
-	 * possibilities must be removed because they are not canonically
-	 * equivalent.
-	 */
-	private String[] producePermutations(String input) {
-		if (input.length() == countChars(input, 0, 1))
-			return new String[] { input };
-		if (input.length() == countChars(input, 0, 2)) {
-			int c0 = Character.codePointAt(input, 0);
-			int c1 = Character.codePointAt(input, Character.charCount(c0));
-			if (getClass(c1) == getClass(c0)) { return new String[] { input }; }
-			String[] result = new String[2];
-			result[0] = input;
-			StringBuilder sb = new StringBuilder(2);
-			sb.appendCodePoint(c1);
-			sb.appendCodePoint(c0);
-			result[1] = sb.toString();
-			return result;
-		}
-		int length = 1;
-		int nCodePoints = countCodePoints(input);
-		for (int x = 1; x < nCodePoints; x++)
-			length = length * (x + 1);
-		String[] temp = new String[length];
-		int combClass[] = new int[nCodePoints];
-		for (int x = 0, i = 0; x < nCodePoints; x++) {
-			int c = Character.codePointAt(input, i);
-			combClass[x] = getClass(c);
-			i += Character.charCount(c);
-		}
-		// For each char, take it out and add the permutations
-		// of the remaining chars
-		int index = 0;
-		int len;
-		// offset maintains the index in code units.
-		loop: for (int x = 0, offset = 0; x < nCodePoints; x++, offset += len) {
-			len = countChars(input, offset, 1);
-			for (int y = x - 1; y >= 0; y--) {
-				if (combClass[y] == combClass[x]) {
-					continue loop;
-				}
-			}
-			StringBuilder sb = new StringBuilder(input);
-			String otherChars = sb.delete(offset, offset + len).toString();
-			String[] subResult = producePermutations(otherChars);
-			String prefix = input.substring(offset, offset + len);
-			for (int y = 0; y < subResult.length; y++)
-				temp[index++] = prefix + subResult[y];
-		}
-		String[] result = new String[index];
-		for (int x = 0; x < index; x++)
-			result[x] = temp[x];
-		return result;
-	}
-	private int getClass(int c) {
-		return sun.text.Normalizer.getCombiningClass(c);
-	}
-	/**
-	 * Attempts to compose input by combining the first character
-	 * with the first combining mark following it. Returns a String
-	 * that is the composition of the leading character with its first
-	 * combining mark followed by the remaining combining marks. Returns
-	 * null if the first two characters cannot be further composed.
-	 */
-	private String composeOneStep(String input) {
-		int len = countChars(input, 0, 2);
-		String firstTwoCharacters = input.substring(0, len);
-		String result = Normalizer.normalize(firstTwoCharacters,
-				Normalizer.Form.NFC);
-		if (result.equals(firstTwoCharacters))
-			return null;
-		else {
-			String remainder = input.substring(len);
-			return result + remainder;
 		}
 	}
 	/**
@@ -1841,73 +1644,42 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	 * of the expression which will create the object tree.
 	 */
 	private void compile() {
-		// Handle canonical equivalences
-		if (has(CANON_EQ) && !has(LITERAL)) {
-			normalize();
-		} else {
-			normalizedPattern = pattern;
-		}
-		codepoints.patternLength = normalizedPattern.length();
-		// Copy pattern to int array for convenience
-		// Use double zero to terminate pattern
-		codepoints.temp = new int[codepoints.patternLength + 2];
-		hasSupplementary = false;
-		int c, count = 0;
-		// Convert all chars into code points
-		for (int x = 0; x < codepoints.patternLength; x += Character
-				.charCount(c)) {
-			c = normalizedPattern.codePointAt(x);
-			if (isSupplementary(c)) {
-				hasSupplementary = true;
-			}
-			codepoints.temp[count++] = c;
-		}
-		codepoints.patternLength = count; // patternLength now in code points
-		if (!has(LITERAL)) codepoints.RemoveQEQuoting();
+		unproc.hasSupplementary = unproc.codepoints.compile(pattern);
 		// Allocate all temporary objects here.
-		buffer = new int[32];
-		groupNodes = new GroupHead[10];
-		namedGroups = null;
+		unproc.buffer = new int[32];
+		registry.clear();
+		parse();
+		// Release temporary storage
+		unproc.codepoints.temp = null;
+		unproc.buffer = null;
+		unproc.codepoints.patternLength = 0;
+		compiled = true;
+	}
+	private void parse() {
 		if (has(LITERAL)) {
 			// Literal pattern handling
-			matchRoot = newSlice(codepoints.temp, codepoints.patternLength,
-					hasSupplementary);
+			matchRoot = newSlice(unproc.codepoints.temp,
+					unproc.codepoints.patternLength,
+					unproc.hasSupplementary);
 			matchRoot.next = lastAccept;
 		} else {
 			// Start recursive descent parsing
 			matchRoot = expr(lastAccept);
-			// Check extra pattern characters
-			if (codepoints.patternLength != codepoints.cursor) {
-				if (codepoints.peek() == ')') {
-					throw error("Unmatched closing ')'");
-				} else {
-					throw error("Unexpected internal error");
-				}
-			}
+			unproc.codepoints.confirmEnding();
 		}
 		// Peephole optimization
 		if (matchRoot instanceof Slice) {
-			root = BnM.optimize(matchRoot);
-			if (root == matchRoot) {
-				root = hasSupplementary ? new StartS(matchRoot)
-						: new Start(matchRoot);
+			unproc.root = BnM.optimize(matchRoot);
+			if (unproc.root == matchRoot) {
+				unproc.root = unproc.hasSupplementary ? new StartS(
+						matchRoot) : new Start(matchRoot);
 			}
 		} else if (matchRoot instanceof Begin || matchRoot instanceof First) {
-			root = matchRoot;
+			unproc.root = matchRoot;
 		} else {
-			root = hasSupplementary ? new StartS(matchRoot) : new Start(
-					matchRoot);
+			unproc.root = unproc.hasSupplementary ? new StartS(matchRoot)
+					: new Start(matchRoot);
 		}
-		// Release temporary storage
-		codepoints.temp = null;
-		buffer = null;
-		groupNodes = null;
-		codepoints.patternLength = 0;
-		compiled = true;
-	}
-	Map<String, Integer> namedGroups() {
-		if (namedGroups == null) namedGroups = new HashMap<>(2);
-		return namedGroups;
 	}
 	/**
 	 * Used to print out a subtree of the Pattern to help with debugging.
@@ -1983,21 +1755,12 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		return (flags & f) != 0;
 	}
 	/**
-	 * Internal method used for handling all syntax errors. The pattern is
-	 * displayed with a pointer to aid in locating the syntax error.
-	 */
-	@Override
-	public PatternSyntaxException error(String s) {
-		return new PatternSyntaxException(s, normalizedPattern,
-				codepoints.cursor - 1);
-	}
-	/**
 	 * Determines if there is any supplementary character or unpaired
 	 * surrogate in the specified range.
 	 */
 	private boolean findSupplementary(int start, int end) {
 		for (int i = start; i < end; i++) {
-			if (isSupplementary(codepoints.temp[i])) return true;
+			if (isSupplementary(unproc.codepoints.temp[i])) return true;
 		}
 		return false;
 	}
@@ -2005,7 +1768,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	 * Determines if the specified code point is a supplementary
 	 * character or unpaired surrogate.
 	 */
-	private static final boolean isSupplementary(int ch) {
+	static final boolean isSupplementary(int ch) {
 		return ch >= Character.MIN_SUPPLEMENTARY_CODE_POINT
 				|| Character.isSurrogate((char) ch);
 	}
@@ -2025,7 +1788,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		Node branchConn = null;
 		for (;;) {
 			Node node = sequence(end);
-			Node nodeTail = root; // double return
+			Node nodeTail = unproc.root; // double return
 			if (prev == null) {
 				prev = node;
 				firstTail = nodeTail;
@@ -2059,8 +1822,8 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 					prev = branch = new Branch(prev, node, branchConn);
 				}
 			}
-			if (codepoints.peek() != '|') { return prev; }
-			codepoints.next();
+			if (unproc.codepoints.peek() != '|') { return prev; }
+			unproc.codepoints.next();
 		}
 	}
 	@SuppressWarnings("fallthrough")
@@ -2072,7 +1835,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		Node tail = null;
 		Node node = null;
 		LOOP: for (;;) {
-			int ch = codepoints.peek();
+			int ch = unproc.codepoints.peek();
 			switch (ch) {
 				case '(':
 					// Because group handles its own closure,
@@ -2084,30 +1847,31 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 						head = node;
 					else tail.next = node;
 					// Double return: Tail was returned in root
-					tail = root;
+					tail = unproc.root;
 					continue;
 				case '[':
-					node = clazz(true);
+					node = unproc.clazz(true);
 					break;
 				case '\\':
-					ch = codepoints.nextEscaped();
+					ch = unproc.codepoints.nextEscaped();
 					if (ch == 'p' || ch == 'P') {
 						boolean oneLetter = true;
 						boolean comp = (ch == 'P');
-						ch = codepoints.next(); // Consume { if present
+						ch = unproc.codepoints.next(); // Consume { if
+													// present
 						if (ch != '{') {
-							codepoints.unread();
+							unproc.codepoints.unread();
 						} else {
 							oneLetter = false;
 						}
-						node = family(oneLetter, comp);
+						node = unproc.family(oneLetter, comp);
 					} else {
-						codepoints.unread();
+						unproc.codepoints.unread();
 						node = atom();
 					}
 					break;
 				case '^':
-					codepoints.next();
+					unproc.codepoints.next();
 					if (has(MULTILINE)) {
 						if (has(UNIX_LINES))
 							node = new UnixCaret();
@@ -2117,13 +1881,13 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 					}
 					break;
 				case '$':
-					codepoints.next();
+					unproc.codepoints.next();
 					if (has(UNIX_LINES))
 						node = new UnixDollar(has(MULTILINE));
 					else node = new Dollar(has(MULTILINE));
 					break;
 				case '.':
-					codepoints.next();
+					unproc.codepoints.next();
 					if (has(DOTALL)) {
 						node = new All();
 					} else {
@@ -2144,11 +1908,12 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 				case '?':
 				case '*':
 				case '+':
-					codepoints.next();
-					throw error("Dangling meta character '" + ((char) ch)
-							+ "'");
+					unproc.codepoints.next();
+					throw unproc.codepoints
+							.error("Dangling meta character '"
+									+ ((char) ch) + "'");
 				case 0:
-					if (codepoints.cursor >= codepoints.patternLength) {
+					if (unproc.codepoints.cursor >= unproc.codepoints.patternLength) {
 						break LOOP;
 					}
 					// Fall through
@@ -2156,7 +1921,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 					node = atom();
 					break;
 			}
-			node = closure(node);
+			node = unproc.closure(node);
 			if (head == null) {
 				head = tail = node;
 			} else {
@@ -2166,7 +1931,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		}
 		if (head == null) { return end; }
 		tail.next = end;
-		root = tail; // double return
+		unproc.root = tail; // double return
 		return head;
 	}
 	@SuppressWarnings("fallthrough")
@@ -2177,7 +1942,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		int first = 0;
 		int prev = -1;
 		boolean hasSupplementary = false;
-		int ch = codepoints.peek();
+		int ch = unproc.codepoints.peek();
 		for (;;) {
 			switch (ch) {
 				case '*':
@@ -2185,7 +1950,8 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 				case '?':
 				case '{':
 					if (first > 1) {
-						codepoints.cursor = prev; // Unwind one character
+						unproc.codepoints.cursor = prev; // Unwind one
+													// character
 						first--;
 					}
 					break;
@@ -2198,660 +1964,65 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 				case ')':
 					break;
 				case '\\':
-					ch = codepoints.nextEscaped();
+					ch = unproc.codepoints.nextEscaped();
 					if (ch == 'p' || ch == 'P') { // Property
 						if (first > 0) { // Slice is waiting; handle it
 										// first
-							codepoints.unread();
+							unproc.codepoints.unread();
 							break;
 						} else { // No slice; just return the family node
 							boolean comp = (ch == 'P');
 							boolean oneLetter = true;
-							ch = codepoints.next(); // Consume { if
-												// present
+							ch = unproc.codepoints.next(); // Consume {
+														// if
+							// present
 							if (ch != '{')
-								codepoints.unread();
+								unproc.codepoints.unread();
 							else oneLetter = false;
-							return family(oneLetter, comp);
+							return unproc.family(oneLetter, comp);
 						}
 					}
-					codepoints.unread();
-					prev = codepoints.cursor;
-					ch = escape(false, first == 0, false);
+					unproc.codepoints.unread();
+					prev = unproc.codepoints.cursor;
+					ch = unproc.escape(false, first == 0, false);
 					if (ch >= 0) {
-						append(ch, first);
+						unproc.append(ch, first);
 						first++;
 						if (isSupplementary(ch)) {
 							hasSupplementary = true;
 						}
-						ch = codepoints.peek();
+						ch = unproc.codepoints.peek();
 						continue;
-					} else if (first == 0) { return root; }
+					} else if (first == 0) { return unproc.root; }
 					// Unwind meta escape sequence
-					codepoints.cursor = prev;
+					unproc.codepoints.cursor = prev;
 					break;
 				case 0:
-					if (codepoints.cursor >= codepoints.patternLength) {
+					if (unproc.codepoints.cursor >= unproc.codepoints.patternLength) {
 						break;
 					}
 					// Fall through
 				default:
-					prev = codepoints.cursor;
-					append(ch, first);
+					prev = unproc.codepoints.cursor;
+					unproc.append(ch, first);
 					first++;
 					if (isSupplementary(ch)) {
 						hasSupplementary = true;
 					}
-					ch = codepoints.next();
+					ch = unproc.codepoints.next();
 					continue;
 			}
 			break;
 		}
 		if (first == 1) {
-			return newSingle(buffer[0]);
+			return newSingle(unproc.buffer[0], flags);
 		} else {
-			return newSlice(buffer, first, hasSupplementary);
+			return newSlice(unproc.buffer, first, hasSupplementary);
 		}
 	}
-	private void append(int ch, int len) {
-		if (len >= buffer.length) {
-			int[] tmp = new int[len + len];
-			System.arraycopy(buffer, 0, tmp, 0, len);
-			buffer = tmp;
-		}
-		buffer[len] = ch;
-	}
-	/**
-	 * Parses a backref greedily, taking as many numbers as it
-	 * can. The first digit is always treated as a backref, but
-	 * multi digit numbers are only treated as a backref if at
-	 * least that many backrefs exist at this point in the regex.
-	 */
-	private Node ref(int refNum) {
-		boolean done = false;
-		while (!done) {
-			int ch = codepoints.peek();
-			switch (ch) {
-				case '0':
-				case '1':
-				case '2':
-				case '3':
-				case '4':
-				case '5':
-				case '6':
-				case '7':
-				case '8':
-				case '9':
-					int newRefNum = (refNum * 10) + (ch - '0');
-					// Add another number if it doesn't make a group
-					// that doesn't exist
-					if (capturingGroupCount - 1 < newRefNum) {
-						done = true;
-						break;
-					}
-					refNum = newRefNum;
-					codepoints.read();
-					break;
-				default:
-					done = true;
-					break;
-			}
-		}
-		if (has(CASE_INSENSITIVE))
-			return new CIBackRef(refNum, has(UNICODE_CASE));
-		else return new BackRef(refNum);
-	}
-	/**
-	 * Parses an escape sequence to determine the actual value that needs
-	 * to be matched.
-	 * If -1 is returned and create was true a new object was added to the tree
-	 * to handle the escape sequence.
-	 * If the returned value is greater than zero, it is the value that
-	 * matches the escape sequence.
-	 */
-	private int escape(boolean inclass, boolean create, boolean isrange) {
-		int ch = codepoints.skip();
-		switch (ch) {
-			case '0':
-				return codepoints.o();
-			case '1':
-			case '2':
-			case '3':
-			case '4':
-			case '5':
-			case '6':
-			case '7':
-			case '8':
-			case '9':
-				if (inclass) break;
-				if (create) {
-					root = ref((ch - '0'));
-				}
-				return -1;
-			case 'A':
-				if (inclass) break;
-				if (create) root = new Begin();
-				return -1;
-			case 'B':
-				if (inclass) break;
-				if (create)
-					root = new Bound(Bound.NONE,
-							has(UNICODE_CHARACTER_CLASS));
-				return -1;
-			case 'C':
-				break;
-			case 'D':
-				if (create)
-					root = has(UNICODE_CHARACTER_CLASS) ? new Utype(
-							UnicodeProp.DIGIT).complement() : new Ctype(
-							ASCII.DIGIT).complement();
-				return -1;
-			case 'E':
-			case 'F':
-				break;
-			case 'G':
-				if (inclass) break;
-				if (create) root = new LastMatch();
-				return -1;
-			case 'H':
-				if (create) root = new HorizWS().complement();
-				return -1;
-			case 'I':
-			case 'J':
-			case 'K':
-			case 'L':
-			case 'M':
-			case 'N':
-			case 'O':
-			case 'P':
-			case 'Q':
-				break;
-			case 'R':
-				if (inclass) break;
-				if (create) root = new LineEnding();
-				return -1;
-			case 'S':
-				if (create)
-					root = has(UNICODE_CHARACTER_CLASS) ? new Utype(
-							UnicodeProp.WHITE_SPACE).complement()
-							: new Ctype(ASCII.SPACE).complement();
-				return -1;
-			case 'T':
-			case 'U':
-				break;
-			case 'V':
-				if (create) root = new VertWS().complement();
-				return -1;
-			case 'W':
-				if (create)
-					root = has(UNICODE_CHARACTER_CLASS) ? new Utype(
-							UnicodeProp.WORD).complement() : new Ctype(
-							ASCII.WORD).complement();
-				return -1;
-			case 'X':
-			case 'Y':
-				break;
-			case 'Z':
-				if (inclass) break;
-				if (create) {
-					if (has(UNIX_LINES))
-						root = new UnixDollar(false);
-					else root = new Dollar(false);
-				}
-				return -1;
-			case 'a':
-				return '\007';
-			case 'b':
-				if (inclass) break;
-				if (create)
-					root = new Bound(Bound.BOTH,
-							has(UNICODE_CHARACTER_CLASS));
-				return -1;
-			case 'c':
-				return codepoints.c();
-			case 'd':
-				if (create)
-					root = has(UNICODE_CHARACTER_CLASS) ? new Utype(
-							UnicodeProp.DIGIT) : new Ctype(ASCII.DIGIT);
-				return -1;
-			case 'e':
-				return '\033';
-			case 'f':
-				return '\f';
-			case 'g':
-				break;
-			case 'h':
-				if (create) root = new HorizWS();
-				return -1;
-			case 'i':
-			case 'j':
-				break;
-			case 'k':
-				if (inclass) break;
-				if (codepoints.read() != '<')
-					throw error("\\k is not followed by '<' for named capturing group");
-				String name = groupname(codepoints.read());
-				if (!namedGroups().containsKey(name))
-					throw error("(named capturing group <" + name
-							+ "> does not exit");
-				if (create) {
-					if (has(CASE_INSENSITIVE))
-						root = new CIBackRef(namedGroups().get(name),
-								has(UNICODE_CASE));
-					else root = new BackRef(namedGroups().get(name));
-				}
-				return -1;
-			case 'l':
-			case 'm':
-				break;
-			case 'n':
-				return '\n';
-			case 'o':
-			case 'p':
-			case 'q':
-				break;
-			case 'r':
-				return '\r';
-			case 's':
-				if (create)
-					root = has(UNICODE_CHARACTER_CLASS) ? new Utype(
-							UnicodeProp.WHITE_SPACE) : new Ctype(
-							ASCII.SPACE);
-				return -1;
-			case 't':
-				return '\t';
-			case 'u':
-				return codepoints.u();
-			case 'v':
-				// '\v' was implemented as VT/0x0B in releases < 1.8 (though
-				// undocumented). In JDK8 '\v' is specified as a predefined
-				// character class for all vertical whitespace characters.
-				// So [-1, root=VertWS node] pair is returned (instead of a
-				// single 0x0B). This breaks the range if '\v' is used as
-				// the start or end value, such as [\v-...] or [...-\v], in
-				// which a single definite value (0x0B) is expected. For
-				// compatibility concern '\013'/0x0B is returned if isrange.
-				if (isrange) return '\013';
-				if (create) root = new VertWS();
-				return -1;
-			case 'w':
-				if (create)
-					root = has(UNICODE_CHARACTER_CLASS) ? new Utype(
-							UnicodeProp.WORD) : new Ctype(ASCII.WORD);
-				return -1;
-			case 'x':
-				return codepoints.x();
-			case 'y':
-				break;
-			case 'z':
-				if (inclass) break;
-				if (create) root = new End();
-				return -1;
-			default:
-				return ch;
-		}
-		throw error("Illegal/unsupported escape sequence");
-	}
-	/**
-	 * Processes repetition. If the next character peeked is a quantifier
-	 * then new nodes must be appended to handle the repetition.
-	 * Prev could be a single or a group, so it could be a chain of nodes.
-	 */
-	private Node closure(Node prev) {
-		int ch = codepoints.peek();
-		switch (ch) {
-			case '?':
-				ch = codepoints.next();
-				if (ch == '?') {
-					codepoints.next();
-					return new Ques(prev, LAZY);
-				} else if (ch == '+') {
-					codepoints.next();
-					return new Ques(prev, POSSESSIVE);
-				}
-				return new Ques(prev, GREEDY);
-			case '*':
-				ch = codepoints.next();
-				if (ch == '?') {
-					codepoints.next();
-					return new Curly(prev, 0, MAX_REPS, LAZY);
-				} else if (ch == '+') {
-					codepoints.next();
-					return new Curly(prev, 0, MAX_REPS, POSSESSIVE);
-				}
-				return new Curly(prev, 0, MAX_REPS, GREEDY);
-			case '+':
-				ch = codepoints.next();
-				if (ch == '?') {
-					codepoints.next();
-					return new Curly(prev, 1, MAX_REPS, LAZY);
-				} else if (ch == '+') {
-					codepoints.next();
-					return new Curly(prev, 1, MAX_REPS, POSSESSIVE);
-				}
-				return new Curly(prev, 1, MAX_REPS, GREEDY);
-			case '{':
-				ch = codepoints.temp[codepoints.cursor + 1];
-				if (ASCII.isDigit(ch)) {
-					codepoints.skip();
-					int cmin = 0;
-					do {
-						cmin = cmin * 10 + (ch - '0');
-					} while (ASCII.isDigit(ch = codepoints.read()));
-					int cmax = cmin;
-					if (ch == ',') {
-						ch = codepoints.read();
-						cmax = MAX_REPS;
-						if (ch != '}') {
-							cmax = 0;
-							while (ASCII.isDigit(ch)) {
-								cmax = cmax * 10 + (ch - '0');
-								ch = codepoints.read();
-							}
-						}
-					}
-					if (ch != '}')
-						throw this.error("Unclosed counted closure");
-					if (((cmin) | (cmax) | (cmax - cmin)) < 0)
-						throw error("Illegal repetition range");
-					Curly curly;
-					ch = codepoints.peek();
-					if (ch == '?') {
-						codepoints.next();
-						curly = new Curly(prev, cmin, cmax, LAZY);
-					} else if (ch == '+') {
-						codepoints.next();
-						curly = new Curly(prev, cmin, cmax, POSSESSIVE);
-					} else {
-						curly = new Curly(prev, cmin, cmax, GREEDY);
-					}
-					return curly;
-				} else {
-					throw error("Illegal repetition");
-				}
-			default:
-				return prev;
-		}
-	}
-	/**
-	 * Parse a character class, and return the node that matches it.
-	 * Consumes a ] on the way out if consume is true. Usually consume
-	 * is true except for the case of [abc&&def] where def is a separate
-	 * right hand node with "understood" brackets.
-	 */
-	private CharProperty clazz(boolean consume) {
-		CharProperty prev = null;
-		CharProperty node = null;
-		BitClass bits = new BitClass();
-		boolean include = true;
-		boolean firstInClass = true;
-		int ch = codepoints.next();
-		for (;;) {
-			switch (ch) {
-				case '^':
-					// Negates if first char in a class, otherwise literal
-					if (firstInClass) {
-						if (codepoints.temp[codepoints.cursor - 1] != '[')
-							break;
-						ch = codepoints.next();
-						include = !include;
-						continue;
-					} else {
-						// ^ not first in class, treat as literal
-						break;
-					}
-				case '[':
-					firstInClass = false;
-					node = clazz(true);
-					if (prev == null)
-						prev = node;
-					else prev = union(prev, node);
-					ch = codepoints.peek();
-					continue;
-				case '&':
-					firstInClass = false;
-					ch = codepoints.next();
-					if (ch == '&') {
-						ch = codepoints.next();
-						CharProperty rightNode = null;
-						while (ch != ']' && ch != '&') {
-							if (ch == '[') {
-								if (rightNode == null)
-									rightNode = clazz(true);
-								else rightNode = union(rightNode,
-										clazz(true));
-							} else { // abc&&def
-								codepoints.unread();
-								rightNode = clazz(false);
-							}
-							ch = codepoints.peek();
-						}
-						if (rightNode != null) node = rightNode;
-						if (prev == null) {
-							if (rightNode == null)
-								throw error("Bad class syntax");
-							else prev = rightNode;
-						} else {
-							prev = intersection(prev, node);
-						}
-					} else {
-						// treat as a literal &
-						codepoints.unread();
-						break;
-					}
-					continue;
-				case 0:
-					firstInClass = false;
-					if (codepoints.cursor >= codepoints.patternLength)
-						throw error("Unclosed character class");
-					break;
-				case ']':
-					firstInClass = false;
-					if (prev != null) {
-						if (consume) codepoints.next();
-						return prev;
-					}
-					break;
-				default:
-					firstInClass = false;
-					break;
-			}
-			node = range(bits);
-			if (include) {
-				if (prev == null) {
-					prev = node;
-				} else {
-					if (prev != node) prev = union(prev, node);
-				}
-			} else {
-				if (prev == null) {
-					prev = node.complement();
-				} else {
-					if (prev != node) prev = setDifference(prev, node);
-				}
-			}
-			ch = codepoints.peek();
-		}
-	}
-	private CharProperty bitsOrSingle(BitClass bits, int ch) {
-		if (ch < 256
-				&& !(has(CASE_INSENSITIVE) && has(UNICODE_CASE) && (ch == 0xff
-						|| ch == 0xb5 || ch == 0x49 || ch == 0x69 || // I
-															// and
-															// i
-						ch == 0x53 || ch == 0x73 || // S and s
-						ch == 0x4b || ch == 0x6b || // K and k
-						ch == 0xc5 || ch == 0xe5))) // A+ring
-			return bits.add(ch, flags());
-		return newSingle(ch);
-	}
-	/**
-	 * Parse a single character or a character range in a character class
-	 * and return its representative node.
-	 */
-	private CharProperty range(BitClass bits) {
-		int ch = codepoints.peek();
-		if (ch == '\\') {
-			ch = codepoints.nextEscaped();
-			if (ch == 'p' || ch == 'P') { // A property
-				boolean comp = (ch == 'P');
-				boolean oneLetter = true;
-				// Consume { if present
-				ch = codepoints.next();
-				if (ch != '{')
-					codepoints.unread();
-				else oneLetter = false;
-				return family(oneLetter, comp);
-			} else { // ordinary escape
-				boolean isrange = codepoints.temp[codepoints.cursor + 1] == '-';
-				codepoints.unread();
-				ch = escape(true, true, isrange);
-				if (ch == -1) return (CharProperty) root;
-			}
-		} else {
-			codepoints.next();
-		}
-		if (ch >= 0) {
-			if (codepoints.peek() == '-') {
-				int endRange = codepoints.temp[codepoints.cursor + 1];
-				if (endRange == '[') { return bitsOrSingle(bits, ch); }
-				if (endRange != ']') {
-					codepoints.next();
-					int m = codepoints.peek();
-					if (m == '\\') {
-						m = escape(true, false, true);
-					} else {
-						codepoints.next();
-					}
-					if (m < ch) { throw error("Illegal character range"); }
-					if (has(CASE_INSENSITIVE))
-						return caseInsensitiveRangeFor(ch, m);
-					else return rangeFor(ch, m);
-				}
-			}
-			return bitsOrSingle(bits, ch);
-		}
-		throw error("Unexpected character '" + ((char) ch) + "'");
-	}
-	/**
-	 * Parses a Unicode character family and returns its representative node.
-	 */
-	private CharProperty family(boolean singleLetter, boolean maybeComplement) {
-		codepoints.next();
-		String name;
-		CharProperty node = null;
-		if (singleLetter) {
-			int c = codepoints.temp[codepoints.cursor];
-			if (!Character.isSupplementaryCodePoint(c)) {
-				name = String.valueOf((char) c);
-			} else {
-				name = new String(codepoints.temp, codepoints.cursor, 1);
-			}
-			codepoints.read();
-		} else {
-			int i = codepoints.cursor;
-			codepoints.mark('}');
-			while (codepoints.read() != '}') {}
-			codepoints.mark('\000');
-			int j = codepoints.cursor;
-			if (j > codepoints.patternLength)
-				throw error("Unclosed character family");
-			if (i + 1 >= j) throw error("Empty character family");
-			name = new String(codepoints.temp, i, j - i - 1);
-		}
-		int i = name.indexOf('=');
-		if (i != -1) {
-			// property construct \p{name=value}
-			String value = name.substring(i + 1);
-			name = name.substring(0, i).toLowerCase(Locale.ENGLISH);
-			if ("sc".equals(name) || "script".equals(name)) {
-				node = unicodeScriptPropertyFor(value);
-			} else if ("blk".equals(name) || "block".equals(name)) {
-				node = unicodeBlockPropertyFor(value);
-			} else if ("gc".equals(name) || "general_category".equals(name)) {
-				node = charPropertyNodeFor(value);
-			} else {
-				throw error("Unknown Unicode property {name=<" + name
-						+ ">, " + "value=<" + value + ">}");
-			}
-		} else {
-			if (name.startsWith("In")) {
-				// \p{inBlockName}
-				node = unicodeBlockPropertyFor(name.substring(2));
-			} else if (name.startsWith("Is")) {
-				// \p{isGeneralCategory} and \p{isScriptName}
-				name = name.substring(2);
-				UnicodeProp uprop = UnicodeProp.forName(name);
-				if (uprop != null) node = new Utype(uprop);
-				if (node == null)
-					node = CharPropertyNames.charPropertyFor(name);
-				if (node == null) node = unicodeScriptPropertyFor(name);
-			} else {
-				if (has(UNICODE_CHARACTER_CLASS)) {
-					UnicodeProp uprop = UnicodeProp.forPOSIXName(name);
-					if (uprop != null) node = new Utype(uprop);
-				}
-				if (node == null) node = charPropertyNodeFor(name);
-			}
-		}
-		if (maybeComplement) {
-			if (node instanceof Category || node instanceof Block)
-				hasSupplementary = true;
-			node = node.complement();
-		}
-		return node;
-	}
-	/**
-	 * Returns a CharProperty matching all characters belong to
-	 * a UnicodeScript.
-	 */
-	private CharProperty unicodeScriptPropertyFor(String name) {
-		final Character.UnicodeScript script;
-		try {
-			script = Character.UnicodeScript.forName(name);
-		} catch (IllegalArgumentException iae) {
-			throw error("Unknown character script name {" + name + "}");
-		}
-		return new Script(script);
-	}
-	/**
-	 * Returns a CharProperty matching all characters in a UnicodeBlock.
-	 */
-	private CharProperty unicodeBlockPropertyFor(String name) {
-		final Character.UnicodeBlock block;
-		try {
-			block = Character.UnicodeBlock.forName(name);
-		} catch (IllegalArgumentException iae) {
-			throw error("Unknown character block name {" + name + "}");
-		}
-		return new Block(block);
-	}
-	/**
-	 * Returns a CharProperty matching all characters in a named property.
-	 */
-	private CharProperty charPropertyNodeFor(String name) {
-		CharProperty p = CharPropertyNames.charPropertyFor(name);
-		if (p == null)
-			throw error("Unknown character property name {" + name + "}");
-		return p;
-	}
-	/**
-	 * Parses and returns the name of a "named capturing group", the trailing
-	 * ">" is consumed after parsing.
-	 */
-	private String groupname(int ch) {
-		StringBuilder sb = new StringBuilder();
-		sb.append(Character.toChars(ch));
-		while (ASCII.isLower(ch = codepoints.read()) || ASCII.isUpper(ch)
-				|| ASCII.isDigit(ch)) {
-			sb.append(Character.toChars(ch));
-		}
-		if (sb.length() == 0)
-			throw error("named capturing group has 0 length name");
-		if (ch != '>')
-			throw error("named capturing group is missing trailing '>'");
-		return sb.toString();
-	}
+	// !!!<ref>
+	// !!!<...>
+	// !!!<groupname>
 	/**
 	 * Parses a group and returns the head node of a set of nodes that process
 	 * the group. Sometimes a double return system is used where the tail is
@@ -2862,20 +2033,20 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		Node head = null;
 		Node tail = null;
 		int save = flags;
-		root = null;
-		int ch = codepoints.next();
+		unproc.root = null;
+		int ch = unproc.codepoints.next();
 		if (ch == '?') {
-			ch = codepoints.skip();
+			ch = unproc.codepoints.skip();
 			switch (ch) {
 				case ':': // (?:xxx) pure group
 					head = createGroup(true);
-					tail = root;
+					tail = unproc.root;
 					head.next = expr(tail);
 					break;
 				case '=': // (?=xxx) and (?!xxx) lookahead
 				case '!':
 					head = createGroup(true);
-					tail = root;
+					tail = unproc.root;
 					head.next = expr(tail);
 					if (ch == '=') {
 						head = tail = new Pos(head);
@@ -2885,36 +2056,39 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 					break;
 				case '>': // (?>xxx) independent group
 					head = createGroup(true);
-					tail = root;
+					tail = unproc.root;
 					head.next = expr(tail);
 					head = tail = new Ques(head, INDEPENDENT);
 					break;
 				case '<': // (?<xxx) look behind
-					ch = codepoints.read();
+					ch = unproc.codepoints.read();
 					if (ASCII.isLower(ch) || ASCII.isUpper(ch)) {
 						// named captured group
-						String name = groupname(ch);
-						if (namedGroups().containsKey(name))
-							throw error("Named capturing group <" + name
-									+ "> is already defined");
+						String name = unproc.groupname(ch);
+						if (registry.groupDefined(name))
+							throw unproc.codepoints
+									.error("Named capturing group <"
+											+ name
+											+ "> is already defined");
 						capturingGroup = true;
 						head = createGroup(false);
-						tail = root;
-						namedGroups().put(name, capturingGroupCount - 1);
+						tail = unproc.root;
+						registry.addToEnd(name);
 						head.next = expr(tail);
 						break;
 					}
-					int start = codepoints.cursor;
+					int start = unproc.codepoints.cursor;
 					head = createGroup(true);
-					tail = root;
+					tail = unproc.root;
 					head.next = expr(tail);
-					tail.next = lookbehindEnd;
+					tail.next = Node.lookbehindEnd;
 					TreeInfo info = new TreeInfo();
 					head.study(info);
-					if (info.maxValid == false) { throw error("Look-behind group does not have "
-							+ "an obvious maximum length"); }
+					if (info.maxValid == false) { throw unproc.codepoints
+							.error("Look-behind group does not have "
+									+ "an obvious maximum length"); }
 					boolean hasSupplementary = findSupplementary(start,
-							codepoints.patternLength);
+							unproc.codepoints.patternLength);
 					if (ch == '=') {
 						head = tail = (hasSupplementary ? new BehindS(
 								head, info.maxLength, info.minLength)
@@ -2926,46 +2100,48 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 								: new NotBehind(head, info.maxLength,
 										info.minLength));
 					} else {
-						throw error("Unknown look-behind group");
+						throw unproc.codepoints
+								.error("Unknown look-behind group");
 					}
 					break;
 				case '$':
 				case '@':
-					throw error("Unknown group type");
+					throw unproc.codepoints.error("Unknown group type");
 				default: // (?xxx:) inlined match flags
-					codepoints.unread();
+					unproc.codepoints.unread();
 					addFlag();
-					ch = codepoints.read();
+					ch = unproc.codepoints.read();
 					if (ch == ')') { return null; // Inline modifier only
 					}
-					if (ch != ':') { throw error("Unknown inline modifier"); }
+					if (ch != ':') { throw unproc.codepoints
+							.error("Unknown inline modifier"); }
 					head = createGroup(true);
-					tail = root;
+					tail = unproc.root;
 					head.next = expr(tail);
 					break;
 			}
 		} else { // (xxx) a regular group
 			capturingGroup = true;
 			head = createGroup(false);
-			tail = root;
+			tail = unproc.root;
 			head.next = expr(tail);
 		}
-		codepoints.accept(')', "Unclosed group");
+		unproc.codepoints.accept(')', "Unclosed group");
 		flags = save;
 		// Check for quantifiers
-		Node node = closure(head);
+		Node node = unproc.closure(head);
 		if (node == head) { // No closure
-			root = tail;
+			unproc.root = tail;
 			return node; // Dual return
 		}
 		if (head == tail) { // Zero length assertion
-			root = node;
+			unproc.root = node;
 			return node; // Dual return
 		}
 		if (node instanceof Ques) {
 			Ques ques = (Ques) node;
 			if (ques.type == POSSESSIVE) {
-				root = node;
+				unproc.root = node;
 				return node;
 			}
 			tail.next = new BranchConn();
@@ -2975,18 +2151,18 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 			} else { // Reluctant quantifier
 				head = new Branch(null, head, tail);
 			}
-			root = tail;
+			unproc.root = tail;
 			return head;
 		} else if (node instanceof Curly) {
 			Curly curly = (Curly) node;
 			if (curly.type == POSSESSIVE) {
-				root = node;
+				unproc.root = node;
 				return node;
 			}
 			// Discover if the group is deterministic
 			TreeInfo info = new TreeInfo();
 			if (head.study(info)) { // Deterministic
-				head = root = new GroupCurly(head.next, curly.cmin,
+				head = unproc.root = new GroupCurly(head.next, curly.cmin,
 						curly.cmax, curly.type,
 						((GroupTail) tail).localIndex,
 						((GroupTail) tail).groupIndex, capturingGroup);
@@ -3004,11 +2180,11 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 				loop.cmax = curly.cmax;
 				loop.body = head;
 				tail.next = loop;
-				root = loop;
+				unproc.root = loop;
 				return prolog; // Dual return
 			}
 		}
-		throw error("Internal logic error");
+		throw unproc.codepoints.error("Internal logic error");
 	}
 	/**
 	 * Create group head and tail nodes using double return. If the group is
@@ -3018,10 +2194,11 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	private Node createGroup(boolean anonymous) {
 		int localIndex = localCount++;
 		int groupIndex = 0;
-		if (!anonymous) groupIndex = capturingGroupCount++;
+		if (!anonymous) {
+			groupIndex = registry.iterateCount();
+		}
 		GroupHead head = new GroupHead(localIndex);
-		root = new GroupTail(localIndex, groupIndex);
-		if (!anonymous && groupIndex < 10) groupNodes[groupIndex] = head;
+		unproc.root = new GroupTail(localIndex, groupIndex);
 		return head;
 	}
 	@SuppressWarnings("fallthrough")
@@ -3029,7 +2206,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	 * Parses inlined match flags and set them appropriately.
 	 */
 	private void addFlag() {
-		int ch = codepoints.peek();
+		int ch = unproc.codepoints.peek();
 		for (;;) {
 			switch (ch) {
 				case 'i':
@@ -3057,12 +2234,12 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 					flags |= (UNICODE_CHARACTER_CLASS | UNICODE_CASE);
 					break;
 				case '-': // subFlag then fall through
-					ch = codepoints.next();
+					ch = unproc.codepoints.next();
 					subFlag();
 				default:
 					return;
 			}
-			ch = codepoints.next();
+			ch = unproc.codepoints.next();
 		}
 	}
 	@SuppressWarnings("fallthrough")
@@ -3071,7 +2248,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	 * flags appropriately.
 	 */
 	private void subFlag() {
-		int ch = codepoints.peek();
+		int ch = unproc.codepoints.peek();
 		for (;;) {
 			switch (ch) {
 				case 'i':
@@ -3100,7 +2277,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 				default:
 					return;
 			}
-			ch = codepoints.next();
+			ch = unproc.codepoints.next();
 		}
 	}
 	static final int MAX_REPS = 0x7FFFFFFF;
@@ -3111,7 +2288,7 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	//
 	// Utility methods for code point support
 	//
-	private static final int countChars(CharSequence seq, int index,
+	static final int countChars(CharSequence seq, int index,
 			int lengthInCodePoints) {
 		// optimization
 		if (lengthInCodePoints == 1
@@ -3145,59 +2322,14 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		}
 		return index - x;
 	}
-	private static final int countCodePoints(CharSequence seq) {
-		int length = seq.length();
-		int n = 0;
-		for (int i = 0; i < length;) {
-			n++;
-			if (Character.isHighSurrogate(seq.charAt(i++))) {
-				if (i < length && Character.isLowSurrogate(seq.charAt(i))) {
-					i++;
-				}
-			}
-		}
-		return n;
-	}
 	/**
-	 * Creates a bit vector for matching Latin-1 values. A normal BitClass
-	 * never matches values above Latin-1, and a complemented BitClass always
-	 * matches values above Latin-1.
-	 */
-	private static final class BitClass extends BmpCharProperty {
-		final boolean[] bits;
-		BitClass() {
-			bits = new boolean[256];
-		}
-		@SuppressWarnings("unused")
-		private BitClass(boolean[] bits) {
-			this.bits = bits;
-		}
-		BitClass add(int c, int flags) {
-			assert c >= 0 && c <= 255;
-			if ((flags & CASE_INSENSITIVE) != 0) {
-				if (ASCII.isAscii(c)) {
-					bits[ASCII.toUpper(c)] = true;
-					bits[ASCII.toLower(c)] = true;
-				} else if ((flags & UNICODE_CASE) != 0) {
-					bits[Character.toLowerCase(c)] = true;
-					bits[Character.toUpperCase(c)] = true;
-				}
-			}
-			bits[c] = true;
-			return this;
-		}
-		@Override
-		boolean isSatisfiedBy(int ch) {
-			return ch < 256 && bits[ch];
-		}
-	}
-	/**
+	 * 
 	 * Returns a suitably optimized, single character matcher.
 	 */
-	private CharProperty newSingle(final int ch) {
-		if (has(CASE_INSENSITIVE)) {
+	static CharProperty newSingle(final int ch, final int flags) {
+		if (has(flags, CASE_INSENSITIVE)) {
 			int lower, upper;
-			if (has(UNICODE_CASE)) {
+			if (has(flags, UNICODE_CASE)) {
 				upper = Character.toUpperCase(ch);
 				lower = Character.toLowerCase(upper);
 				if (upper != lower) return new SingleU(lower);
@@ -3242,711 +2374,13 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	 * Each type of object knows how to match its equivalent construct with
 	 * the match() method.
 	 */
-	/**
-	 * Base class for all node classes. Subclasses should override the match()
-	 * method as appropriate. This class is an accepting node, so its match()
-	 * always returns true.
-	 */
-	static class Node extends Object {
-		Node next;
-		Node() {
-			next = Pattern.accept;
-		}
-		/**
-		 * This method implements the classic accept node.
-		 */
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			matcher.last = i;
-			matcher.cacheGroup(0, Range.of(matcher.first, matcher.last));
-			return true;
-		}
-		/**
-		 * This method is good for all zero length assertions.
-		 */
-		boolean study(TreeInfo info) {
-			if (next != null) {
-				return next.study(info);
-			} else {
-				return info.deterministic;
-			}
-		}
-	}
-	static class LastNode extends Node {
-		/**
-		 * This method implements the classic accept node with
-		 * the addition of a check to see if the match occurred
-		 * using all of the input.
-		 */
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			if (matcher.acceptMode == Matcher.ENDANCHOR && i != matcher.to)
-				return false;
-			matcher.last = i;
-			matcher.cacheGroup(0, Range.of(matcher.first, matcher.last));
-			return true;
-		}
-	}
-	/**
-	 * Used for REs that can start anywhere within the input string.
-	 * This basically tries to match repeatedly at each spot in the
-	 * input string, moving forward after each try. An anchored search
-	 * or a BnM will bypass this node completely.
-	 */
-	static class Start extends Node {
-		int minLength;
-		Start(Node node) {
-			this.next = node;
-			TreeInfo info = new TreeInfo();
-			next.study(info);
-			minLength = info.minLength;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			if (i > matcher.to - minLength) {
-				matcher.hitEnd = true;
-				return false;
-			}
-			int guard = matcher.to - minLength;
-			for (; i <= guard; i++) {
-				if (next.match(matcher, i, seq)) {
-					matcher.first = i;
-					matcher.cacheGroup(0,
-							Range.of(matcher.first, matcher.last));
-					return true;
-				}
-			}
-			matcher.hitEnd = true;
-			return false;
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			next.study(info);
-			info.maxValid = false;
-			info.deterministic = false;
-			return false;
-		}
-	}
-	/*
-	 * StartS supports supplementary characters, including unpaired surrogates.
-	 */
-	static final class StartS extends Start {
-		StartS(Node node) {
-			super(node);
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			if (i > matcher.to - minLength) {
-				matcher.hitEnd = true;
-				return false;
-			}
-			int guard = matcher.to - minLength;
-			while (i <= guard) {
-				// if ((ret = next.match(matcher, i, seq)) || i == guard)
-				if (next.match(matcher, i, seq)) {
-					matcher.first = i;
-					matcher.cacheGroup(0,
-							Range.of(matcher.first, matcher.last));
-					return true;
-				}
-				if (i == guard) break;
-				// Optimization to move to the next character. This is
-				// faster than countChars(seq, i, 1).
-				if (Character.isHighSurrogate(seq.charAt(i++))) {
-					if (i < seq.length()
-							&& Character.isLowSurrogate(seq.charAt(i))) {
-						i++;
-					}
-				}
-			}
-			matcher.hitEnd = true;
-			return false;
-		}
-	}
-	/**
-	 * Node to anchor at the beginning of input. This object implements the
-	 * match for a \A sequence, and the caret anchor will use this if not in
-	 * multiline mode.
-	 */
-	static final class Begin extends Node {
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int fromIndex = (matcher.anchoringBounds) ? matcher.from : 0;
-			if (i == fromIndex && next.match(matcher, i, seq)) {
-				matcher.first = i;
-				matcher.cacheGroup(0, Range.of(i, matcher.last));
-				return true;
-			} else {
-				return false;
-			}
-		}
-	}
-	/**
-	 * Node to anchor at the end of input. This is the absolute end, so this
-	 * should not match at the last newline before the end as $ will.
-	 */
-	static final class End extends Node {
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int endIndex = (matcher.anchoringBounds) ? matcher.to : matcher
-					.getTextLength();
-			if (i == endIndex) {
-				matcher.hitEnd = true;
-				return next.match(matcher, i, seq);
-			}
-			return false;
-		}
-	}
-	/**
-	 * Node to anchor at the beginning of a line. This is essentially the
-	 * object to match for the multiline ^.
-	 */
-	static final class Caret extends Node {
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int startIndex = matcher.from;
-			int endIndex = matcher.to;
-			if (!matcher.anchoringBounds) {
-				startIndex = 0;
-				endIndex = matcher.getTextLength();
-			}
-			// Perl does not match ^ at end of input even after newline
-			if (i == endIndex) {
-				matcher.hitEnd = true;
-				return false;
-			}
-			if (i > startIndex) {
-				char ch = seq.charAt(i - 1);
-				if (ch != '\n' && ch != '\r' && (ch | 1) != '\u2029'
-						&& ch != '\u0085') { return false; }
-				// Should treat /r/n as one newline
-				if (ch == '\r' && seq.charAt(i) == '\n') return false;
-			}
-			return next.match(matcher, i, seq);
-		}
-	}
-	/**
-	 * Node to anchor at the beginning of a line when in unixdot mode.
-	 */
-	static final class UnixCaret extends Node {
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int startIndex = matcher.from;
-			int endIndex = matcher.to;
-			if (!matcher.anchoringBounds) {
-				startIndex = 0;
-				endIndex = matcher.getTextLength();
-			}
-			// Perl does not match ^ at end of input even after newline
-			if (i == endIndex) {
-				matcher.hitEnd = true;
-				return false;
-			}
-			if (i > startIndex) {
-				char ch = seq.charAt(i - 1);
-				if (ch != '\n') { return false; }
-			}
-			return next.match(matcher, i, seq);
-		}
-	}
-	/**
-	 * Node to match the location where the last match ended.
-	 * This is used for the \G construct.
-	 */
-	static final class LastMatch extends Node {
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			if (i != matcher.oldLast) return false;
-			return next.match(matcher, i, seq);
-		}
-	}
-	/**
-	 * Node to anchor at the end of a line or the end of input based on the
-	 * multiline mode.
-	 * When not in multiline mode, the $ can only match at the very end
-	 * of the input, unless the input ends in a line terminator in which
-	 * it matches right before the last line terminator.
-	 * Note that \r\n is considered an atomic line terminator.
-	 * Like ^ the $ operator matches at a position, it does not match the
-	 * line terminators themselves.
-	 */
-	static final class Dollar extends Node {
-		boolean multiline;
-		Dollar(boolean mul) {
-			multiline = mul;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int endIndex = (matcher.anchoringBounds) ? matcher.to : matcher
-					.getTextLength();
-			if (!multiline) {
-				if (i < endIndex - 2) return false;
-				if (i == endIndex - 2) {
-					char ch = seq.charAt(i);
-					if (ch != '\r') return false;
-					ch = seq.charAt(i + 1);
-					if (ch != '\n') return false;
-				}
-			}
-			// Matches before any line terminator; also matches at the
-			// end of input
-			// Before line terminator:
-			// If multiline, we match here no matter what
-			// If not multiline, fall through so that the end
-			// is marked as hit; this must be a /r/n or a /n
-			// at the very end so the end was hit; more input
-			// could make this not match here
-			if (i < endIndex) {
-				char ch = seq.charAt(i);
-				if (ch == '\n') {
-					// No match between \r\n
-					if (i > 0 && seq.charAt(i - 1) == '\r') return false;
-					if (multiline) return next.match(matcher, i, seq);
-				} else if (ch == '\r' || ch == '\u0085'
-						|| (ch | 1) == '\u2029') {
-					if (multiline) return next.match(matcher, i, seq);
-				} else { // No line terminator, no match
-					return false;
-				}
-			}
-			// Matched at current end so hit end
-			matcher.hitEnd = true;
-			// If a $ matches because of end of input, then more input
-			// could cause it to fail!
-			matcher.requireEnd = true;
-			return next.match(matcher, i, seq);
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			next.study(info);
-			return info.deterministic;
-		}
-	}
-	/**
-	 * Node to anchor at the end of a line or the end of input based on the
-	 * multiline mode when in unix lines mode.
-	 */
-	static final class UnixDollar extends Node {
-		boolean multiline;
-		UnixDollar(boolean mul) {
-			multiline = mul;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int endIndex = (matcher.anchoringBounds) ? matcher.to : matcher
-					.getTextLength();
-			if (i < endIndex) {
-				char ch = seq.charAt(i);
-				if (ch == '\n') {
-					// If not multiline, then only possible to
-					// match at very end or one before end
-					if (multiline == false && i != endIndex - 1)
-						return false;
-					// If multiline return next.match without setting
-					// matcher.hitEnd
-					if (multiline) return next.match(matcher, i, seq);
-				} else {
-					return false;
-				}
-			}
-			// Matching because at the end or 1 before the end;
-			// more input could change this so set hitEnd
-			matcher.hitEnd = true;
-			// If a $ matches because of end of input, then more input
-			// could cause it to fail!
-			matcher.requireEnd = true;
-			return next.match(matcher, i, seq);
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			next.study(info);
-			return info.deterministic;
-		}
-	}
-	/**
-	 * Node class that matches a Unicode line ending '\R'
-	 */
-	static final class LineEnding extends Node {
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			// (u+000Du+000A|[u+000Au+000Bu+000Cu+000Du+0085u+2028u+2029])
-			if (i < matcher.to) {
-				int ch = seq.charAt(i);
-				if (ch == 0x0A || ch == 0x0B || ch == 0x0C || ch == 0x85
-						|| ch == 0x2028 || ch == 0x2029)
-					return next.match(matcher, i + 1, seq);
-				if (ch == 0x0D) {
-					i++;
-					if (i < matcher.to && seq.charAt(i) == 0x0A) i++;
-					return next.match(matcher, i, seq);
-				}
-			} else {
-				matcher.hitEnd = true;
-			}
-			return false;
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			info.minLength++;
-			info.maxLength += 2;
-			return next.study(info);
-		}
-	}
-	/**
-	 * Abstract node class to match one character satisfying some
-	 * boolean property.
-	 */
-	private static abstract class CharProperty extends Node {
-		abstract boolean isSatisfiedBy(int ch);
-		CharProperty complement() {
-			return new CharProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return !CharProperty.this.isSatisfiedBy(ch);
-				}
-			};
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			if (i < matcher.to) {
-				int ch = Character.codePointAt(seq, i);
-				return isSatisfiedBy(ch)
-						&& next.match(matcher,
-								i + Character.charCount(ch), seq);
-			} else {
-				matcher.hitEnd = true;
-				return false;
-			}
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			info.minLength++;
-			info.maxLength++;
-			return next.study(info);
-		}
-	}
-	/**
-	 * Optimized version of CharProperty that works only for
-	 * properties never satisfied by Supplementary characters.
-	 */
-	private static abstract class BmpCharProperty extends CharProperty {
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			if (i < matcher.to) {
-				return isSatisfiedBy(seq.charAt(i))
-						&& next.match(matcher, i + 1, seq);
-			} else {
-				matcher.hitEnd = true;
-				return false;
-			}
-		}
-	}
-	/**
-	 * Node class that matches a Supplementary Unicode character
-	 */
-	static final class SingleS extends CharProperty {
-		final int c;
-		SingleS(int c) {
-			this.c = c;
-		}
-		@Override
-		boolean isSatisfiedBy(int ch) {
-			return ch == c;
-		}
-	}
-	/**
-	 * Optimization -- matches a given BMP character
-	 */
-	static final class Single extends BmpCharProperty {
-		final int c;
-		Single(int c) {
-			this.c = c;
-		}
-		@Override
-		boolean isSatisfiedBy(int ch) {
-			return ch == c;
-		}
-	}
-	/**
-	 * Case insensitive matches a given BMP character
-	 */
-	static final class SingleI extends BmpCharProperty {
-		final int lower;
-		final int upper;
-		SingleI(int lower, int upper) {
-			this.lower = lower;
-			this.upper = upper;
-		}
-		@Override
-		boolean isSatisfiedBy(int ch) {
-			return ch == lower || ch == upper;
-		}
-	}
-	/**
-	 * Unicode case insensitive matches a given Unicode character
-	 */
-	static final class SingleU extends CharProperty {
-		final int lower;
-		SingleU(int lower) {
-			this.lower = lower;
-		}
-		@Override
-		boolean isSatisfiedBy(int ch) {
-			return lower == ch
-					|| lower == Character.toLowerCase(Character
-							.toUpperCase(ch));
-		}
-	}
-	/**
-	 * Node class that matches a Unicode block.
-	 */
-	static final class Block extends CharProperty {
-		final Character.UnicodeBlock block;
-		Block(Character.UnicodeBlock block) {
-			this.block = block;
-		}
-		@Override
-		boolean isSatisfiedBy(int ch) {
-			return block == Character.UnicodeBlock.of(ch);
-		}
-	}
-	/**
-	 * Node class that matches a Unicode script
-	 */
-	static final class Script extends CharProperty {
-		final Character.UnicodeScript script;
-		Script(Character.UnicodeScript script) {
-			this.script = script;
-		}
-		@Override
-		boolean isSatisfiedBy(int ch) {
-			return script == Character.UnicodeScript.of(ch);
-		}
-	}
-	/**
-	 * Node class that matches a Unicode category.
-	 */
-	static final class Category extends CharProperty {
-		final int typeMask;
-		Category(int typeMask) {
-			this.typeMask = typeMask;
-		}
-		@Override
-		boolean isSatisfiedBy(int ch) {
-			return (typeMask & (1 << Character.getType(ch))) != 0;
-		}
-	}
-	/**
-	 * Node class that matches a Unicode "type"
-	 */
-	static final class Utype extends CharProperty {
-		final UnicodeProp uprop;
-		Utype(UnicodeProp uprop) {
-			this.uprop = uprop;
-		}
-		@Override
-		boolean isSatisfiedBy(int ch) {
-			return uprop.is(ch);
-		}
-	}
-	/**
-	 * Node class that matches a POSIX type.
-	 */
-	static final class Ctype extends BmpCharProperty {
-		final int ctype;
-		Ctype(int ctype) {
-			this.ctype = ctype;
-		}
-		@Override
-		boolean isSatisfiedBy(int ch) {
-			return ch < 128 && ASCII.isType(ch, ctype);
-		}
-	}
-	/**
-	 * Node class that matches a Perl vertical whitespace
-	 */
-	static final class VertWS extends BmpCharProperty {
-		@Override
-		boolean isSatisfiedBy(int cp) {
-			return (cp >= 0x0A && cp <= 0x0D) || cp == 0x85 || cp == 0x2028
-					|| cp == 0x2029;
-		}
-	}
-	/**
-	 * Node class that matches a Perl horizontal whitespace
-	 */
-	static final class HorizWS extends BmpCharProperty {
-		@Override
-		boolean isSatisfiedBy(int cp) {
-			return cp == 0x09 || cp == 0x20 || cp == 0xa0 || cp == 0x1680
-					|| cp == 0x180e || cp >= 0x2000 && cp <= 0x200a
-					|| cp == 0x202f || cp == 0x205f || cp == 0x3000;
-		}
-	}
-	/**
-	 * Base class for all Slice nodes
-	 */
-	static class SliceNode extends Node {
-		int[] buffer;
-		SliceNode(int[] buf) {
-			buffer = buf;
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			info.minLength += buffer.length;
-			info.maxLength += buffer.length;
-			return next.study(info);
-		}
-	}
-	/**
-	 * Node class for a case sensitive/BMP-only sequence of literal
-	 * characters.
-	 */
-	static final class Slice extends SliceNode {
-		Slice(int[] buf) {
-			super(buf);
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int[] buf = buffer;
-			int len = buf.length;
-			for (int j = 0; j < len; j++) {
-				if ((i + j) >= matcher.to) {
-					matcher.hitEnd = true;
-					return false;
-				}
-				if (buf[j] != seq.charAt(i + j)) return false;
-			}
-			return next.match(matcher, i + len, seq);
-		}
-	}
-	/**
-	 * Node class for a case_insensitive/BMP-only sequence of literal
-	 * characters.
-	 */
-	static class SliceI extends SliceNode {
-		SliceI(int[] buf) {
-			super(buf);
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int[] buf = buffer;
-			int len = buf.length;
-			for (int j = 0; j < len; j++) {
-				if ((i + j) >= matcher.to) {
-					matcher.hitEnd = true;
-					return false;
-				}
-				int c = seq.charAt(i + j);
-				if (buf[j] != c && buf[j] != ASCII.toLower(c))
-					return false;
-			}
-			return next.match(matcher, i + len, seq);
-		}
-	}
-	/**
-	 * Node class for a unicode_case_insensitive/BMP-only sequence of
-	 * literal characters. Uses unicode case folding.
-	 */
-	static final class SliceU extends SliceNode {
-		SliceU(int[] buf) {
-			super(buf);
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int[] buf = buffer;
-			int len = buf.length;
-			for (int j = 0; j < len; j++) {
-				if ((i + j) >= matcher.to) {
-					matcher.hitEnd = true;
-					return false;
-				}
-				int c = seq.charAt(i + j);
-				if (buf[j] != c
-						&& buf[j] != Character.toLowerCase(Character
-								.toUpperCase(c))) return false;
-			}
-			return next.match(matcher, i + len, seq);
-		}
-	}
-	/**
-	 * Node class for a case sensitive sequence of literal characters
-	 * including supplementary characters.
-	 */
-	static final class SliceS extends SliceNode {
-		SliceS(int[] buf) {
-			super(buf);
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int[] buf = buffer;
-			int x = i;
-			for (int j = 0; j < buf.length; j++) {
-				if (x >= matcher.to) {
-					matcher.hitEnd = true;
-					return false;
-				}
-				int c = Character.codePointAt(seq, x);
-				if (buf[j] != c) return false;
-				x += Character.charCount(c);
-				if (x > matcher.to) {
-					matcher.hitEnd = true;
-					return false;
-				}
-			}
-			return next.match(matcher, x, seq);
-		}
-	}
-	/**
-	 * Node class for a case insensitive sequence of literal characters
-	 * including supplementary characters.
-	 */
-	static class SliceIS extends SliceNode {
-		SliceIS(int[] buf) {
-			super(buf);
-		}
-		int toLower(int c) {
-			return ASCII.toLower(c);
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int[] buf = buffer;
-			int x = i;
-			for (int j = 0; j < buf.length; j++) {
-				if (x >= matcher.to) {
-					matcher.hitEnd = true;
-					return false;
-				}
-				int c = Character.codePointAt(seq, x);
-				if (buf[j] != c && buf[j] != toLower(c)) return false;
-				x += Character.charCount(c);
-				if (x > matcher.to) {
-					matcher.hitEnd = true;
-					return false;
-				}
-			}
-			return next.match(matcher, x, seq);
-		}
-	}
-	/**
-	 * Node class for a case insensitive sequence of literal characters.
-	 * Uses unicode case folding.
-	 */
-	static final class SliceUS extends SliceIS {
-		SliceUS(int[] buf) {
-			super(buf);
-		}
-		@Override
-		int toLower(int c) {
-			return Character.toLowerCase(Character.toUpperCase(c));
-		}
-	}
-	private static boolean inRange(int lower, int ch, int upper) {
+	static boolean inRange(int lower, int ch, int upper) {
 		return lower <= ch && ch <= upper;
 	}
 	/**
 	 * Returns node for matching characters within an explicit value range.
 	 */
-	private static CharProperty rangeFor(final int lower, final int upper) {
+	static CharProperty rangeFor(final int lower, final int upper) {
 		return new CharProperty() {
 			@Override
 			boolean isSatisfiedBy(int ch) {
@@ -3955,1151 +2389,10 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		};
 	}
 	/**
-	 * Returns node for matching characters within an explicit value
-	 * range in a case insensitive manner.
-	 */
-	private CharProperty caseInsensitiveRangeFor(final int lower,
-			final int upper) {
-		if (has(UNICODE_CASE)) return new CharProperty() {
-			@Override
-			boolean isSatisfiedBy(int ch) {
-				if (inRange(lower, ch, upper)) return true;
-				int up = Character.toUpperCase(ch);
-				return inRange(lower, up, upper)
-						|| inRange(lower, Character.toLowerCase(up),
-								upper);
-			}
-		};
-		return new CharProperty() {
-			@Override
-			boolean isSatisfiedBy(int ch) {
-				return inRange(lower, ch, upper)
-						|| ASCII.isAscii(ch)
-						&& (inRange(lower, ASCII.toUpper(ch), upper) || inRange(
-								lower, ASCII.toLower(ch), upper));
-			}
-		};
-	}
-	/**
-	 * Implements the Unicode category ALL and the dot metacharacter when
-	 * in dotall mode.
-	 */
-	static final class All extends CharProperty {
-		@Override
-		boolean isSatisfiedBy(int ch) {
-			return true;
-		}
-	}
-	/**
-	 * Node class for the dot metacharacter when dotall is not enabled.
-	 */
-	static final class Dot extends CharProperty {
-		@Override
-		boolean isSatisfiedBy(int ch) {
-			return (ch != '\n' && ch != '\r' && (ch | 1) != '\u2029' && ch != '\u0085');
-		}
-	}
-	/**
-	 * Node class for the dot metacharacter when dotall is not enabled
-	 * but UNIX_LINES is enabled.
-	 */
-	static final class UnixDot extends CharProperty {
-		@Override
-		boolean isSatisfiedBy(int ch) {
-			return ch != '\n';
-		}
-	}
-	/**
-	 * The 0 or 1 quantifier. This one class implements all three types.
-	 */
-	static final class Ques extends Node {
-		Node atom;
-		int type;
-		Ques(Node node, int type) {
-			this.atom = node;
-			this.type = type;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			switch (type) {
-				case GREEDY:
-					return (atom.match(matcher, i, seq) && next.match(
-							matcher, matcher.last, seq))
-							|| next.match(matcher, i, seq);
-				case LAZY:
-					return next.match(matcher, i, seq)
-							|| (atom.match(matcher, i, seq) && next
-									.match(matcher, matcher.last, seq));
-				case POSSESSIVE:
-					if (atom.match(matcher, i, seq)) i = matcher.last;
-					return next.match(matcher, i, seq);
-				default:
-					return atom.match(matcher, i, seq)
-							&& next.match(matcher, matcher.last, seq);
-			}
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			if (type != INDEPENDENT) {
-				int minL = info.minLength;
-				atom.study(info);
-				info.minLength = minL;
-				info.deterministic = false;
-				return next.study(info);
-			} else {
-				atom.study(info);
-				return next.study(info);
-			}
-		}
-	}
-	/**
-	 * Handles the curly-brace style repetition with a specified minimum and
-	 * maximum occurrences. The * quantifier is handled as a special case.
-	 * This class handles the three types.
-	 */
-	static final class Curly extends Node {
-		Node atom;
-		int type;
-		int cmin;
-		int cmax;
-		Curly(Node node, int cmin, int cmax, int type) {
-			this.atom = node;
-			this.type = type;
-			this.cmin = cmin;
-			this.cmax = cmax;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int j;
-			for (j = 0; j < cmin; j++) {
-				if (atom.match(matcher, i, seq)) {
-					i = matcher.last;
-					continue;
-				}
-				return false;
-			}
-			if (type == GREEDY)
-				return match0(matcher, i, j, seq);
-			else if (type == LAZY)
-				return match1(matcher, i, j, seq);
-			else return match2(matcher, i, j, seq);
-		}
-		// Greedy match.
-		// i is the index to start matching at
-		// j is the number of atoms that have matched
-		boolean match0(Matcher matcher, int i, int j, CharSequence seq) {
-			if (j >= cmax) {
-				// We have matched the maximum... continue with the rest of
-				// the regular expression
-				return next.match(matcher, i, seq);
-			}
-			int backLimit = j;
-			while (atom.match(matcher, i, seq)) {
-				// k is the length of this match
-				int k = matcher.last - i;
-				if (k == 0) // Zero length match
-					break;
-				// Move up index and number matched
-				i = matcher.last;
-				j++;
-				// We are greedy so match as many as we can
-				while (j < cmax) {
-					if (!atom.match(matcher, i, seq)) break;
-					if (i + k != matcher.last) {
-						if (match0(matcher, matcher.last, j + 1, seq))
-							return true;
-						break;
-					}
-					i += k;
-					j++;
-				}
-				// Handle backing off if match fails
-				while (j >= backLimit) {
-					if (next.match(matcher, i, seq)) return true;
-					i -= k;
-					j--;
-				}
-				return false;
-			}
-			return next.match(matcher, i, seq);
-		}
-		// Reluctant match. At this point, the minimum has been satisfied.
-		// i is the index to start matching at
-		// j is the number of atoms that have matched
-		boolean match1(Matcher matcher, int i, int j, CharSequence seq) {
-			for (;;) {
-				// Try finishing match without consuming any more
-				if (next.match(matcher, i, seq)) return true;
-				// At the maximum, no match found
-				if (j >= cmax) return false;
-				// Okay, must try one more atom
-				if (!atom.match(matcher, i, seq)) return false;
-				// If we haven't moved forward then must break out
-				if (i == matcher.last) return false;
-				// Move up index and number matched
-				i = matcher.last;
-				j++;
-			}
-		}
-		boolean match2(Matcher matcher, int i, int j, CharSequence seq) {
-			for (; j < cmax; j++) {
-				if (!atom.match(matcher, i, seq)) break;
-				if (i == matcher.last) break;
-				i = matcher.last;
-			}
-			return next.match(matcher, i, seq);
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			// Save original info
-			int minL = info.minLength;
-			int maxL = info.maxLength;
-			boolean maxV = info.maxValid;
-			boolean detm = info.deterministic;
-			info.reset();
-			atom.study(info);
-			int temp = info.minLength * cmin + minL;
-			if (temp < minL) {
-				temp = 0xFFFFFFF; // arbitrary large number
-			}
-			info.minLength = temp;
-			if (maxV & info.maxValid) {
-				temp = info.maxLength * cmax + maxL;
-				info.maxLength = temp;
-				if (temp < maxL) {
-					info.maxValid = false;
-				}
-			} else {
-				info.maxValid = false;
-			}
-			if (info.deterministic && cmin == cmax)
-				info.deterministic = detm;
-			else info.deterministic = false;
-			return next.study(info);
-		}
-	}
-	/**
-	 * Handles the curly-brace style repetition with a specified minimum and
-	 * maximum occurrences in deterministic cases. This is an iterative
-	 * optimization over the Prolog and Loop system which would handle this
-	 * in a recursive way. The * quantifier is handled as a special case.
-	 * If capture is true then this class saves group settings and ensures
-	 * that groups are unset when backing off of a group match.
-	 */
-	static final class GroupCurly extends Node {
-		Node atom;
-		int type;
-		int cmin;
-		int cmax;
-		int localIndex;
-		int groupIndex;
-		private final boolean capture;
-		GroupCurly(Node node, int cmin, int cmax, int type, int local,
-				int group, boolean capture) {
-			this.atom = node;
-			this.type = type;
-			this.cmin = cmin;
-			this.cmax = cmax;
-			this.localIndex = local;
-			this.groupIndex = group;
-			this.capture = capture;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			ArrayList<Range>[] groupsr = matcher.groupsr;
-			int[] locals = matcher.locals;
-			int save0 = locals[localIndex];
-			ArrayList<Range> saver = new ArrayList<Range>();
-			if (capture) {
-				saver = new ArrayList<>(groupsr[groupIndex / 2]);
-			}
-			// Notify GroupTail there is no need to setup group info
-			// because it will be set here
-			locals[localIndex] = -1;
-			boolean ret = true;
-			for (int j = 0; j < cmin; j++) {
-				if (atom.match(matcher, i, seq)) {
-					if (capture) {
-						matcher.cacheGroup(groupIndex / 2,
-								Range.of(i, matcher.last));
-					}
-					i = matcher.last;
-				} else {
-					ret = false;
-					break;
-				}
-			}
-			if (ret) {
-				if (type == GREEDY) {
-					ret = match0(matcher, i, cmin, seq);
-				} else if (type == LAZY) {
-					ret = match1(matcher, i, cmin, seq);
-				} else {
-					ret = match2(matcher, i, cmin, seq);
-				}
-			}
-			if (!ret) {
-				locals[localIndex] = save0;
-				if (capture) {
-					groupsr[groupIndex / 2] = saver;
-				}
-			}
-			return ret;
-		}
-		// Aggressive group match
-		boolean match0(Matcher matcher, int i, int j, CharSequence seq) {
-			// don't back off passing the starting "j"
-			int min = j;
-			for (;;) {
-				if (j >= cmax) break;
-				if (!atom.match(matcher, i, seq)) break;
-				int k = matcher.last - i;
-				if (k <= 0) {
-					if (capture) {
-						matcher.cacheGroup(groupIndex / 2,
-								Range.of(i, i + k));
-					}
-					i = i + k;
-					break;
-				}
-				for (;;) {
-					if (capture) {
-						matcher.cacheGroup(groupIndex / 2,
-								Range.of(i, i + k));
-					}
-					i = i + k;
-					if (++j >= cmax) break;
-					if (!atom.match(matcher, i, seq)) break;
-					if (i + k != matcher.last) {
-						if (match0(matcher, i, j, seq)) return true;
-						break;
-					}
-				}
-				while (j > min) {
-					if (next.match(matcher, i, seq)) {
-						if (capture) {
-							matcher.cacheGroup(groupIndex / 2,
-									Range.of(i - k, i));
-						}
-						return true;
-					}
-					// backing off
-					i = i - k;
-					if (capture) {
-						matcher.cacheGroup(groupIndex / 2,
-								Range.of(i - k, i));
-					}
-					j--;
-				}
-				break;
-			}
-			return next.match(matcher, i, seq);
-		}
-		// Reluctant matching
-		boolean match1(Matcher matcher, int i, int j, CharSequence seq) {
-			for (;;) {
-				if (next.match(matcher, i, seq)) return true;
-				if (j >= cmax) return false;
-				if (!atom.match(matcher, i, seq)) return false;
-				if (i == matcher.last) return false;
-				if (capture) {
-					matcher.cacheGroup(0, Range.of(i, matcher.last));
-				}
-				i = matcher.last;
-				j++;
-			}
-		}
-		// Possessive matching
-		boolean match2(Matcher matcher, int i, int j, CharSequence seq) {
-			for (; j < cmax; j++) {
-				if (!atom.match(matcher, i, seq)) {
-					break;
-				}
-				if (capture) {
-					matcher.cacheGroup(0, Range.of(i, matcher.last));
-				}
-				if (i == matcher.last) {
-					break;
-				}
-				i = matcher.last;
-			}
-			return next.match(matcher, i, seq);
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			// Save original info
-			int minL = info.minLength;
-			int maxL = info.maxLength;
-			boolean maxV = info.maxValid;
-			boolean detm = info.deterministic;
-			info.reset();
-			atom.study(info);
-			int temp = info.minLength * cmin + minL;
-			if (temp < minL) {
-				temp = 0xFFFFFFF; // Arbitrary large number
-			}
-			info.minLength = temp;
-			if (maxV & info.maxValid) {
-				temp = info.maxLength * cmax + maxL;
-				info.maxLength = temp;
-				if (temp < maxL) {
-					info.maxValid = false;
-				}
-			} else {
-				info.maxValid = false;
-			}
-			if (info.deterministic && cmin == cmax) {
-				info.deterministic = detm;
-			} else {
-				info.deterministic = false;
-			}
-			return next.study(info);
-		}
-	}
-	/**
-	 * A Guard node at the end of each atom node in a Branch. It
-	 * serves the purpose of chaining the "match" operation to
-	 * "next" but not the "study", so we can collect the TreeInfo
-	 * of each atom node without including the TreeInfo of the
-	 * "next".
-	 */
-	static final class BranchConn extends Node {
-		BranchConn() {};
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			return next.match(matcher, i, seq);
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			return info.deterministic;
-		}
-	}
-	/**
-	 * Handles the branching of alternations. Note this is also used for
-	 * the ? quantifier to branch between the case where it matches once
-	 * and where it does not occur.
-	 */
-	static final class Branch extends Node {
-		Node[] atoms = new Node[2];
-		int size = 2;
-		Node conn;
-		Branch(Node first, Node second, Node branchConn) {
-			conn = branchConn;
-			atoms[0] = first;
-			atoms[1] = second;
-		}
-		void add(Node node) {
-			if (size >= atoms.length) {
-				Node[] tmp = new Node[atoms.length * 2];
-				System.arraycopy(atoms, 0, tmp, 0, atoms.length);
-				atoms = tmp;
-			}
-			atoms[size++] = node;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			for (int n = 0; n < size; n++) {
-				if (atoms[n] == null) {
-					if (conn.next.match(matcher, i, seq)) return true;
-				} else if (atoms[n].match(matcher, i, seq)) { return true; }
-			}
-			return false;
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			int minL = info.minLength;
-			int maxL = info.maxLength;
-			boolean maxV = info.maxValid;
-			int minL2 = Integer.MAX_VALUE; // arbitrary large enough num
-			int maxL2 = -1;
-			for (int n = 0; n < size; n++) {
-				info.reset();
-				if (atoms[n] != null) atoms[n].study(info);
-				minL2 = Math.min(minL2, info.minLength);
-				maxL2 = Math.max(maxL2, info.maxLength);
-				maxV = (maxV & info.maxValid);
-			}
-			minL += minL2;
-			maxL += maxL2;
-			info.reset();
-			conn.next.study(info);
-			info.minLength += minL;
-			info.maxLength += maxL;
-			info.maxValid &= maxV;
-			info.deterministic = false;
-			return false;
-		}
-	}
-	/**
-	 * The GroupHead saves the location where the group begins in the locals
-	 * and restores them when the match is done.
-	 * The matchRef is used when a reference to this group is accessed later
-	 * in the expression. The locals will have a negative value in them to
-	 * indicate that we do not want to unset the group if the reference
-	 * doesn't match.
-	 */
-	static final class GroupHead extends Node {
-		int localIndex;
-		GroupHead(int localCount) {
-			localIndex = localCount;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int save = matcher.locals[localIndex];
-			matcher.locals[localIndex] = i;
-			boolean ret = next.match(matcher, i, seq);
-			matcher.locals[localIndex] = save;
-			return ret;
-		}
-		boolean matchRef(Matcher matcher, int i, CharSequence seq) {
-			int save = matcher.locals[localIndex];
-			matcher.locals[localIndex] = ~i; // HACK
-			boolean ret = next.match(matcher, i, seq);
-			matcher.locals[localIndex] = save;
-			return ret;
-		}
-	}
-	/**
-	 * Recursive reference to a group in the regular expression. It calls
-	 * matchRef because if the reference fails to match we would not unset
-	 * the group.
-	 */
-	static final class GroupRef extends Node {
-		GroupHead head;
-		GroupRef(GroupHead head) {
-			this.head = head;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			return head.matchRef(matcher, i, seq)
-					&& next.match(matcher, matcher.last, seq);
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			info.maxValid = false;
-			info.deterministic = false;
-			return next.study(info);
-		}
-	}
-	/**
-	 * The GroupTail handles the setting of group beginning and ending
-	 * locations when groups are successfully matched. It must also be able to
-	 * unset groups that have to be backed off of.
-	 * The GroupTail node is also used when a previous group is referenced,
-	 * and in that case no group information needs to be set.
-	 */
-	static final class GroupTail extends Node {
-		int localIndex;
-		int groupIndex;
-		GroupTail(int localCount, int groupCount) {
-			localIndex = localCount;
-			groupIndex = groupCount + groupCount;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int tmp = matcher.locals[localIndex];
-			if (tmp >= 0) { // This is the normal group case.
-				// Save the group so we can unset it if it
-				// backs off of a match.
-				matcher.cacheGroup(groupIndex / 2, Range.of(tmp, i));
-				if (next.match(matcher, i, seq)) { return true; }
-				matcher.groupsr[groupIndex / 2]
-						.remove(matcher.groupsr[groupIndex / 2].size() - 1);;
-				return false;
-			} else {
-				// This is a group reference case. We don't need to save any
-				// group info because it isn't really a group.
-				matcher.last = i;
-				return true;
-			}
-		}
-	}
-	/**
-	 * This sets up a loop to handle a recursive quantifier structure.
-	 */
-	static final class Prolog extends Node {
-		Loop loop;
-		Prolog(Loop loop) {
-			this.loop = loop;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			return loop.matchInit(matcher, i, seq);
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			return loop.study(info);
-		}
-	}
-	/**
-	 * Handles the repetition count for a greedy Curly. The matchInit
-	 * is called from the Prolog to save the index of where the group
-	 * beginning is stored. A zero length group check occurs in the
-	 * normal match but is skipped in the matchInit.
-	 */
-	static class Loop extends Node {
-		Node body;
-		int countIndex; // local count index in matcher locals
-		int beginIndex; // group beginning index
-		int cmin, cmax;
-		Loop(int countIndex, int beginIndex) {
-			this.countIndex = countIndex;
-			this.beginIndex = beginIndex;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			// Avoid infinite loop in zero-length case.
-			if (i > matcher.locals[beginIndex]) {
-				int count = matcher.locals[countIndex];
-				// This block is for before we reach the minimum
-				// iterations required for the loop to match
-				if (count < cmin) {
-					matcher.locals[countIndex] = count + 1;
-					boolean b = body.match(matcher, i, seq);
-					// If match failed we must backtrack, so
-					// the loop count should NOT be incremented
-					if (!b) matcher.locals[countIndex] = count;
-					// Return success or failure since we are under
-					// minimum
-					return b;
-				}
-				// This block is for after we have the minimum
-				// iterations required for the loop to match
-				if (count < cmax) {
-					matcher.locals[countIndex] = count + 1;
-					boolean b = body.match(matcher, i, seq);
-					// If match failed we must backtrack, so
-					// the loop count should NOT be incremented
-					if (!b)
-						matcher.locals[countIndex] = count;
-					else return true;
-				}
-			}
-			return next.match(matcher, i, seq);
-		}
-		boolean matchInit(Matcher matcher, int i, CharSequence seq) {
-			int save = matcher.locals[countIndex];
-			boolean ret = false;
-			if (0 < cmin) {
-				matcher.locals[countIndex] = 1;
-				ret = body.match(matcher, i, seq);
-			} else if (0 < cmax) {
-				matcher.locals[countIndex] = 1;
-				ret = body.match(matcher, i, seq);
-				if (ret == false) ret = next.match(matcher, i, seq);
-			} else {
-				ret = next.match(matcher, i, seq);
-			}
-			matcher.locals[countIndex] = save;
-			return ret;
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			info.maxValid = false;
-			info.deterministic = false;
-			return false;
-		}
-	}
-	/**
-	 * Handles the repetition count for a reluctant Curly. The matchInit
-	 * is called from the Prolog to save the index of where the group
-	 * beginning is stored. A zero length group check occurs in the
-	 * normal match but is skipped in the matchInit.
-	 */
-	static final class LazyLoop extends Loop {
-		LazyLoop(int countIndex, int beginIndex) {
-			super(countIndex, beginIndex);
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			// Check for zero length group
-			if (i > matcher.locals[beginIndex]) {
-				int count = matcher.locals[countIndex];
-				if (count < cmin) {
-					matcher.locals[countIndex] = count + 1;
-					boolean result = body.match(matcher, i, seq);
-					// If match failed we must backtrack, so
-					// the loop count should NOT be incremented
-					if (!result) matcher.locals[countIndex] = count;
-					return result;
-				}
-				if (next.match(matcher, i, seq)) return true;
-				if (count < cmax) {
-					matcher.locals[countIndex] = count + 1;
-					boolean result = body.match(matcher, i, seq);
-					// If match failed we must backtrack, so
-					// the loop count should NOT be incremented
-					if (!result) matcher.locals[countIndex] = count;
-					return result;
-				}
-				return false;
-			}
-			return next.match(matcher, i, seq);
-		}
-		@Override
-		boolean matchInit(Matcher matcher, int i, CharSequence seq) {
-			int save = matcher.locals[countIndex];
-			boolean ret = false;
-			if (0 < cmin) {
-				matcher.locals[countIndex] = 1;
-				ret = body.match(matcher, i, seq);
-			} else if (next.match(matcher, i, seq)) {
-				ret = true;
-			} else if (0 < cmax) {
-				matcher.locals[countIndex] = 1;
-				ret = body.match(matcher, i, seq);
-			}
-			matcher.locals[countIndex] = save;
-			return ret;
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			info.maxValid = false;
-			info.deterministic = false;
-			return false;
-		}
-	}
-	/**
-	 * Refers to a group in the regular expression. Attempts to match
-	 * whatever the group referred to last matched.
-	 */
-	static class BackRef extends Node {
-		int groupIndex;
-		BackRef(int groupCount) {
-			super();
-			groupIndex = groupCount + groupCount;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int j, k;
-			try {
-				j = matcher.start(groupIndex / 2);
-				k = matcher.end(groupIndex / 2);
-			} catch (IndexOutOfBoundsException e) {
-				j = k = -1;
-			}
-			// TODO
-			int groupSize = k - j;
-			// If the referenced group didn't match, neither can this
-			if (j < 0) return false;
-			// If there isn't enough input left no match
-			if (i + groupSize > matcher.to) {
-				matcher.hitEnd = true;
-				return false;
-			}
-			// Check each new char to make sure it matches what the group
-			// referenced matched last time around
-			for (int index = 0; index < groupSize; index++)
-				if (seq.charAt(i + index) != seq.charAt(j + index))
-					return false;
-			return next.match(matcher, i + groupSize, seq);
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			info.maxValid = false;
-			return next.study(info);
-		}
-	}
-	static class CIBackRef extends Node {
-		int groupIndex;
-		boolean doUnicodeCase;
-		CIBackRef(int groupCount, boolean doUnicodeCase) {
-			super();
-			groupIndex = groupCount + groupCount;
-			this.doUnicodeCase = doUnicodeCase;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int j = matcher.start(groupIndex / 2);
-			int k = matcher.end(groupIndex / 2);
-			int groupSize = k - j;
-			// If the referenced group didn't match, neither can this
-			if (j < 0) return false;
-			// If there isn't enough input left no match
-			if (i + groupSize > matcher.to) {
-				matcher.hitEnd = true;
-				return false;
-			}
-			// Check each new char to make sure it matches what the group
-			// referenced matched last time around
-			int x = i;
-			for (int index = 0; index < groupSize; index++) {
-				int c1 = Character.codePointAt(seq, x);
-				int c2 = Character.codePointAt(seq, j);
-				if (c1 != c2) {
-					if (doUnicodeCase) {
-						int cc1 = Character.toUpperCase(c1);
-						int cc2 = Character.toUpperCase(c2);
-						if (cc1 != cc2
-								&& Character.toLowerCase(cc1) != Character
-										.toLowerCase(cc2))
-							return false;
-					} else {
-						if (ASCII.toLower(c1) != ASCII.toLower(c2))
-							return false;
-					}
-				}
-				x += Character.charCount(c1);
-				j += Character.charCount(c2);
-			}
-			return next.match(matcher, i + groupSize, seq);
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			info.maxValid = false;
-			return next.study(info);
-		}
-	}
-	/**
-	 * Searches until the next instance of its atom. This is useful for
-	 * finding the atom efficiently without passing an instance of it
-	 * (greedy problem) and without a lot of wasted search time (reluctant
-	 * problem).
-	 */
-	static final class First extends Node {
-		Node atom;
-		First(Node node) {
-			this.atom = BnM.optimize(node);
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			if (atom instanceof BnM) { return atom.match(matcher, i, seq)
-					&& next.match(matcher, matcher.last, seq); }
-			for (;;) {
-				if (i > matcher.to) {
-					matcher.hitEnd = true;
-					return false;
-				}
-				if (atom.match(matcher, i, seq)) { return next.match(
-						matcher, matcher.last, seq); }
-				i += countChars(seq, i, 1);
-				matcher.first++;
-			}
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			atom.study(info);
-			info.maxValid = false;
-			info.deterministic = false;
-			return next.study(info);
-		}
-	}
-	static final class Conditional extends Node {
-		Node cond, yes, not;
-		Conditional(Node cond, Node yes, Node not) {
-			this.cond = cond;
-			this.yes = yes;
-			this.not = not;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			if (cond.match(matcher, i, seq)) {
-				return yes.match(matcher, i, seq);
-			} else {
-				return not.match(matcher, i, seq);
-			}
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			int minL = info.minLength;
-			int maxL = info.maxLength;
-			boolean maxV = info.maxValid;
-			info.reset();
-			yes.study(info);
-			int minL2 = info.minLength;
-			int maxL2 = info.maxLength;
-			boolean maxV2 = info.maxValid;
-			info.reset();
-			not.study(info);
-			info.minLength = minL + Math.min(minL2, info.minLength);
-			info.maxLength = maxL + Math.max(maxL2, info.maxLength);
-			info.maxValid = (maxV & maxV2 & info.maxValid);
-			info.deterministic = false;
-			return next.study(info);
-		}
-	}
-	/**
-	 * Zero width positive lookahead.
-	 */
-	static final class Pos extends Node {
-		Node cond;
-		Pos(Node cond) {
-			this.cond = cond;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int savedTo = matcher.to;
-			boolean conditionMatched = false;
-			// Relax transparent region boundaries for lookahead
-			if (matcher.transparentBounds)
-				matcher.to = matcher.getTextLength();
-			try {
-				conditionMatched = cond.match(matcher, i, seq);
-			} finally {
-				// Reinstate region boundaries
-				matcher.to = savedTo;
-			}
-			return conditionMatched && next.match(matcher, i, seq);
-		}
-	}
-	/**
-	 * Zero width negative lookahead.
-	 */
-	static final class Neg extends Node {
-		Node cond;
-		Neg(Node cond) {
-			this.cond = cond;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int savedTo = matcher.to;
-			boolean conditionMatched = false;
-			// Relax transparent region boundaries for lookahead
-			if (matcher.transparentBounds)
-				matcher.to = matcher.getTextLength();
-			try {
-				if (i < matcher.to) {
-					conditionMatched = !cond.match(matcher, i, seq);
-				} else {
-					// If a negative lookahead succeeds then more input
-					// could cause it to fail!
-					matcher.requireEnd = true;
-					conditionMatched = !cond.match(matcher, i, seq);
-				}
-			} finally {
-				// Reinstate region boundaries
-				matcher.to = savedTo;
-			}
-			return conditionMatched && next.match(matcher, i, seq);
-		}
-	}
-	/**
-	 * For use with lookbehinds; matches the position where the lookbehind
-	 * was encountered.
-	 */
-	static Node lookbehindEnd = new Node() {
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			return i == matcher.lookbehindTo;
-		}
-	};
-	/**
-	 * Zero width positive lookbehind.
-	 */
-	static class Behind extends Node {
-		Node cond;
-		int rmax, rmin;
-		Behind(Node cond, int rmax, int rmin) {
-			this.cond = cond;
-			this.rmax = rmax;
-			this.rmin = rmin;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int savedFrom = matcher.from;
-			boolean conditionMatched = false;
-			int startIndex = (!matcher.transparentBounds) ? matcher.from : 0;
-			int from = Math.max(i - rmax, startIndex);
-			// Set end boundary
-			int savedLBT = matcher.lookbehindTo;
-			matcher.lookbehindTo = i;
-			// Relax transparent region boundaries for lookbehind
-			if (matcher.transparentBounds) matcher.from = 0;
-			for (int j = i - rmin; !conditionMatched && j >= from; j--) {
-				conditionMatched = cond.match(matcher, j, seq);
-			}
-			matcher.from = savedFrom;
-			matcher.lookbehindTo = savedLBT;
-			return conditionMatched && next.match(matcher, i, seq);
-		}
-	}
-	/**
-	 * Zero width positive lookbehind, including supplementary
-	 * characters or unpaired surrogates.
-	 */
-	static final class BehindS extends Behind {
-		BehindS(Node cond, int rmax, int rmin) {
-			super(cond, rmax, rmin);
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int rmaxChars = countChars(seq, i, -rmax);
-			int rminChars = countChars(seq, i, -rmin);
-			int savedFrom = matcher.from;
-			int startIndex = (!matcher.transparentBounds) ? matcher.from : 0;
-			boolean conditionMatched = false;
-			int from = Math.max(i - rmaxChars, startIndex);
-			// Set end boundary
-			int savedLBT = matcher.lookbehindTo;
-			matcher.lookbehindTo = i;
-			// Relax transparent region boundaries for lookbehind
-			if (matcher.transparentBounds) matcher.from = 0;
-			for (int j = i - rminChars; !conditionMatched && j >= from; j -= j > from ? countChars(
-					seq, j, -1) : 1) {
-				conditionMatched = cond.match(matcher, j, seq);
-			}
-			matcher.from = savedFrom;
-			matcher.lookbehindTo = savedLBT;
-			return conditionMatched && next.match(matcher, i, seq);
-		}
-	}
-	/**
-	 * Zero width negative lookbehind.
-	 */
-	static class NotBehind extends Node {
-		Node cond;
-		int rmax, rmin;
-		NotBehind(Node cond, int rmax, int rmin) {
-			this.cond = cond;
-			this.rmax = rmax;
-			this.rmin = rmin;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int savedLBT = matcher.lookbehindTo;
-			int savedFrom = matcher.from;
-			boolean conditionMatched = false;
-			int startIndex = (!matcher.transparentBounds) ? matcher.from : 0;
-			int from = Math.max(i - rmax, startIndex);
-			matcher.lookbehindTo = i;
-			// Relax transparent region boundaries for lookbehind
-			if (matcher.transparentBounds) matcher.from = 0;
-			for (int j = i - rmin; !conditionMatched && j >= from; j--) {
-				conditionMatched = cond.match(matcher, j, seq);
-			}
-			// Reinstate region boundaries
-			matcher.from = savedFrom;
-			matcher.lookbehindTo = savedLBT;
-			return !conditionMatched && next.match(matcher, i, seq);
-		}
-	}
-	/**
-	 * Zero width negative lookbehind, including supplementary
-	 * characters or unpaired surrogates.
-	 */
-	static final class NotBehindS extends NotBehind {
-		NotBehindS(Node cond, int rmax, int rmin) {
-			super(cond, rmax, rmin);
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int rmaxChars = countChars(seq, i, -rmax);
-			int rminChars = countChars(seq, i, -rmin);
-			int savedFrom = matcher.from;
-			int savedLBT = matcher.lookbehindTo;
-			boolean conditionMatched = false;
-			int startIndex = (!matcher.transparentBounds) ? matcher.from : 0;
-			int from = Math.max(i - rmaxChars, startIndex);
-			matcher.lookbehindTo = i;
-			// Relax transparent region boundaries for lookbehind
-			if (matcher.transparentBounds) matcher.from = 0;
-			for (int j = i - rminChars; !conditionMatched && j >= from; j -= j > from ? countChars(
-					seq, j, -1) : 1) {
-				conditionMatched = cond.match(matcher, j, seq);
-			}
-			// Reinstate region boundaries
-			matcher.from = savedFrom;
-			matcher.lookbehindTo = savedLBT;
-			return !conditionMatched && next.match(matcher, i, seq);
-		}
-	}
-	/**
-	 * Returns the set union of two CharProperty nodes.
-	 */
-	private static CharProperty union(final CharProperty lhs,
-			final CharProperty rhs) {
-		return new CharProperty() {
-			@Override
-			boolean isSatisfiedBy(int ch) {
-				return lhs.isSatisfiedBy(ch) || rhs.isSatisfiedBy(ch);
-			}
-		};
-	}
-	/**
-	 * Returns the set intersection of two CharProperty nodes.
-	 */
-	private static CharProperty intersection(final CharProperty lhs,
-			final CharProperty rhs) {
-		return new CharProperty() {
-			@Override
-			boolean isSatisfiedBy(int ch) {
-				return lhs.isSatisfiedBy(ch) && rhs.isSatisfiedBy(ch);
-			}
-		};
-	}
-	/**
-	 * Returns the set difference of two CharProperty nodes.
-	 */
-	private static CharProperty setDifference(final CharProperty lhs,
-			final CharProperty rhs) {
-		return new CharProperty() {
-			@Override
-			boolean isSatisfiedBy(int ch) {
-				return !rhs.isSatisfiedBy(ch) && lhs.isSatisfiedBy(ch);
-			}
-		};
-	}
-	/**
-	 * Handles word boundaries. Includes a field to allow this one class to
-	 * deal with the different types of word boundaries we can match. The word
-	 * characters include underscores, letters, and digits. Non spacing marks
-	 * can are also part of a word if they have a base character, otherwise
-	 * they are ignored for purposes of finding word boundaries.
-	 */
-	static final class Bound extends Node {
-		static int LEFT = 0x1;
-		static int RIGHT = 0x2;
-		static int BOTH = 0x3;
-		static int NONE = 0x4;
-		int type;
-		boolean useUWORD;
-		Bound(int n, boolean useUWORD) {
-			type = n;
-			this.useUWORD = useUWORD;
-		}
-		boolean isWord(int ch) {
-			return useUWORD ? UnicodeProp.WORD.is(ch)
-					: (ch == '_' || Character.isLetterOrDigit(ch));
-		}
-		int check(Matcher matcher, int i, CharSequence seq) {
-			int ch;
-			boolean left = false;
-			int startIndex = matcher.from;
-			int endIndex = matcher.to;
-			if (matcher.transparentBounds) {
-				startIndex = 0;
-				endIndex = matcher.getTextLength();
-			}
-			if (i > startIndex) {
-				ch = Character.codePointBefore(seq, i);
-				left = (isWord(ch) || ((Character.getType(ch) == Character.NON_SPACING_MARK) && hasBaseCharacter(
-						matcher, i - 1, seq)));
-			}
-			boolean right = false;
-			if (i < endIndex) {
-				ch = Character.codePointAt(seq, i);
-				right = (isWord(ch) || ((Character.getType(ch) == Character.NON_SPACING_MARK) && hasBaseCharacter(
-						matcher, i, seq)));
-			} else {
-				// Tried to access char past the end
-				matcher.hitEnd = true;
-				// The addition of another char could wreck a boundary
-				matcher.requireEnd = true;
-			}
-			return ((left ^ right) ? (right ? LEFT : RIGHT) : NONE);
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			return (check(matcher, i, seq) & type) > 0
-					&& next.match(matcher, i, seq);
-		}
-	}
-	/**
 	 * Non spacing marks only count as word characters in bounds calculations
 	 * if they have a base character.
 	 */
-	private static boolean hasBaseCharacter(Matcher matcher, int i,
-			CharSequence seq) {
+	static boolean hasBaseCharacter(Matcher matcher, int i, CharSequence seq) {
 		int start = (!matcher.transparentBounds) ? matcher.from : 0;
 		for (int x = i; x >= start; x--) {
 			int ch = Character.codePointAt(seq, x);
@@ -5110,186 +2403,6 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 		}
 		return false;
 	}
-	/**
-	 * Attempts to match a slice in the input using the Boyer-Moore string
-	 * matching algorithm. The algorithm is based on the idea that the
-	 * pattern can be shifted farther ahead in the search text if it is
-	 * matched right to left.
-	 * <p>
-	 * The pattern is compared to the input one character at a time, from the
-	 * rightmost character in the pattern to the left. If the characters all
-	 * match the pattern has been found. If a character does not match, the
-	 * pattern is shifted right a distance that is the maximum of two
-	 * functions, the bad character shift and the good suffix shift. This shift
-	 * moves the attempted match position through the input more quickly than a
-	 * naive one position at a time check.
-	 * <p>
-	 * The bad character shift is based on the character from the text that did
-	 * not match. If the character does not appear in the pattern, the pattern
-	 * can be shifted completely beyond the bad character. If the character
-	 * does occur in the pattern, the pattern can be shifted to line the
-	 * pattern up with the next occurrence of that character.
-	 * <p>
-	 * The good suffix shift is based on the idea that some subset on the right
-	 * side of the pattern has matched. When a bad character is found, the
-	 * pattern can be shifted right by the pattern length if the subset does
-	 * not occur again in pattern, or by the amount of distance to the next
-	 * occurrence of the subset in the pattern. Boyer-Moore search methods
-	 * adapted from code by Amy Yu.
-	 */
-	static class BnM extends Node {
-		int[] buffer;
-		int[] lastOcc;
-		int[] optoSft;
-		/**
-		 * Pre calculates arrays needed to generate the bad character
-		 * shift and the good suffix shift. Only the last seven bits
-		 * are used to see if chars match; This keeps the tables small
-		 * and covers the heavily used ASCII range, but occasionally
-		 * results in an aliased match for the bad character shift.
-		 */
-		static Node optimize(Node node) {
-			if (!(node instanceof Slice)) { return node; }
-			int[] src = ((Slice) node).buffer;
-			int patternLength = src.length;
-			// The BM algorithm requires a bit of overhead;
-			// If the pattern is short don't use it, since
-			// a shift larger than the pattern length cannot
-			// be used anyway.
-			if (patternLength < 4) { return node; }
-			int i, j;
-			int[] lastOcc = new int[128];
-			int[] optoSft = new int[patternLength];
-			// Precalculate part of the bad character shift
-			// It is a table for where in the pattern each
-			// lower 7-bit value occurs
-			for (i = 0; i < patternLength; i++) {
-				lastOcc[src[i] & 0x7F] = i + 1;
-			}
-			// Precalculate the good suffix shift
-			// i is the shift amount being considered
-			NEXT: for (i = patternLength; i > 0; i--) {
-				// j is the beginning index of suffix being considered
-				for (j = patternLength - 1; j >= i; j--) {
-					// Testing for good suffix
-					if (src[j] == src[j - i]) {
-						// src[j..len] is a good suffix
-						optoSft[j - 1] = i;
-					} else {
-						// No match. The array has already been
-						// filled up with correct values before.
-						continue NEXT;
-					}
-				}
-				// This fills up the remaining of optoSft
-				// any suffix can not have larger shift amount
-				// then its sub-suffix. Why???
-				while (j > 0) {
-					optoSft[--j] = i;
-				}
-			}
-			// Set the guard value because of unicode compression
-			optoSft[patternLength - 1] = 1;
-			if (node instanceof SliceS)
-				return new BnMS(src, lastOcc, optoSft, node.next);
-			return new BnM(src, lastOcc, optoSft, node.next);
-		}
-		BnM(int[] src, int[] lastOcc, int[] optoSft, Node next) {
-			this.buffer = src;
-			this.lastOcc = lastOcc;
-			this.optoSft = optoSft;
-			this.next = next;
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int[] src = buffer;
-			int patternLength = src.length;
-			int last = matcher.to - patternLength;
-			// Loop over all possible match positions in text
-			NEXT: while (i <= last) {
-				// Loop over pattern from right to left
-				for (int j = patternLength - 1; j >= 0; j--) {
-					int ch = seq.charAt(i + j);
-					if (ch != src[j]) {
-						// Shift search to the right by the maximum of the
-						// bad character shift and the good suffix shift
-						i += Math.max(j + 1 - lastOcc[ch & 0x7F],
-								optoSft[j]);
-						continue NEXT;
-					}
-				}
-				// Entire pattern matched starting at i
-				matcher.first = i;
-				boolean ret = next.match(matcher, i + patternLength, seq);
-				if (ret) {
-					matcher.first = i;
-					matcher.cacheGroup(0,
-							Range.of(matcher.first, matcher.last));
-					return true;
-				}
-				i++;
-			}
-			// BnM is only used as the leading node in the unanchored case,
-			// and it replaced its Start() which always searches to the end
-			// if it doesn't find what it's looking for, so hitEnd is true.
-			matcher.hitEnd = true;
-			return false;
-		}
-		@Override
-		boolean study(TreeInfo info) {
-			info.minLength += buffer.length;
-			info.maxValid = false;
-			return next.study(info);
-		}
-	}
-	/**
-	 * Supplementary support version of BnM(). Unpaired surrogates are
-	 * also handled by this class.
-	 */
-	static final class BnMS extends BnM {
-		int lengthInChars;
-		BnMS(int[] src, int[] lastOcc, int[] optoSft, Node next) {
-			super(src, lastOcc, optoSft, next);
-			for (int x = 0; x < buffer.length; x++) {
-				lengthInChars += Character.charCount(buffer[x]);
-			}
-		}
-		@Override
-		boolean match(Matcher matcher, int i, CharSequence seq) {
-			int[] src = buffer;
-			int patternLength = src.length;
-			int last = matcher.to - lengthInChars;
-			// Loop over all possible match positions in text
-			NEXT: while (i <= last) {
-				// Loop over pattern from right to left
-				int ch;
-				for (int j = countChars(seq, i, patternLength), x = patternLength - 1; j > 0; j -= Character
-						.charCount(ch), x--) {
-					ch = Character.codePointBefore(seq, i + j);
-					if (ch != src[x]) {
-						// Shift search to the right by the maximum of the
-						// bad character shift and the good suffix shift
-						int n = Math.max(x + 1 - lastOcc[ch & 0x7F],
-								optoSft[x]);
-						i += countChars(seq, i, n);
-						continue NEXT;
-					}
-				}
-				// Entire pattern matched starting at i
-				matcher.first = i;
-				boolean ret = next.match(matcher, i + lengthInChars, seq);
-				if (ret) {
-					matcher.first = i;
-					matcher.cacheGroup(0,
-							Range.of(matcher.first, matcher.last));
-					return true;
-				}
-				i += countChars(seq, i, 1);
-			}
-			matcher.hitEnd = true;
-			return false;
-		}
-	}
 	// /////////////////////////////////////////////////////////////////////////////
 	// /////////////////////////////////////////////////////////////////////////////
 	/**
@@ -5297,272 +2410,6 @@ public final class Pattern implements java.io.Serializable, ErrorProvider {
 	 */
 	static Node accept = new Node();
 	static Node lastAccept = new LastNode();
-	private static class CharPropertyNames {
-		static CharProperty charPropertyFor(String name) {
-			CharPropertyFactory m = map.get(name);
-			return m == null ? null : m.make();
-		}
-		private static abstract class CharPropertyFactory {
-			abstract CharProperty make();
-		}
-		private static void defCategory(String name, final int typeMask) {
-			map.put(name, new CharPropertyFactory() {
-				@Override
-				CharProperty make() {
-					return new Category(typeMask);
-				}
-			});
-		}
-		private static void defRange(String name, final int lower,
-				final int upper) {
-			map.put(name, new CharPropertyFactory() {
-				@Override
-				CharProperty make() {
-					return rangeFor(lower, upper);
-				}
-			});
-		}
-		private static void defCtype(String name, final int ctype) {
-			map.put(name, new CharPropertyFactory() {
-				@Override
-				CharProperty make() {
-					return new Ctype(ctype);
-				}
-			});
-		}
-		private static abstract class CloneableProperty extends CharProperty
-				implements Cloneable {
-			@Override
-			public CloneableProperty clone() {
-				try {
-					return (CloneableProperty) super.clone();
-				} catch (CloneNotSupportedException e) {
-					throw new AssertionError(e);
-				}
-			}
-		}
-		private static void defClone(String name, final CloneableProperty p) {
-			map.put(name, new CharPropertyFactory() {
-				@Override
-				CharProperty make() {
-					return p.clone();
-				}
-			});
-		}
-		private static final HashMap<String, CharPropertyFactory> map = new HashMap<>();
-		static {
-			// Unicode character property aliases, defined in
-			// http://www.unicode.org/Public/UNIDATA/PropertyValueAliases.txt
-			defCategory("Cn", 1 << Character.UNASSIGNED);
-			defCategory("Lu", 1 << Character.UPPERCASE_LETTER);
-			defCategory("Ll", 1 << Character.LOWERCASE_LETTER);
-			defCategory("Lt", 1 << Character.TITLECASE_LETTER);
-			defCategory("Lm", 1 << Character.MODIFIER_LETTER);
-			defCategory("Lo", 1 << Character.OTHER_LETTER);
-			defCategory("Mn", 1 << Character.NON_SPACING_MARK);
-			defCategory("Me", 1 << Character.ENCLOSING_MARK);
-			defCategory("Mc", 1 << Character.COMBINING_SPACING_MARK);
-			defCategory("Nd", 1 << Character.DECIMAL_DIGIT_NUMBER);
-			defCategory("Nl", 1 << Character.LETTER_NUMBER);
-			defCategory("No", 1 << Character.OTHER_NUMBER);
-			defCategory("Zs", 1 << Character.SPACE_SEPARATOR);
-			defCategory("Zl", 1 << Character.LINE_SEPARATOR);
-			defCategory("Zp", 1 << Character.PARAGRAPH_SEPARATOR);
-			defCategory("Cc", 1 << Character.CONTROL);
-			defCategory("Cf", 1 << Character.FORMAT);
-			defCategory("Co", 1 << Character.PRIVATE_USE);
-			defCategory("Cs", 1 << Character.SURROGATE);
-			defCategory("Pd", 1 << Character.DASH_PUNCTUATION);
-			defCategory("Ps", 1 << Character.START_PUNCTUATION);
-			defCategory("Pe", 1 << Character.END_PUNCTUATION);
-			defCategory("Pc", 1 << Character.CONNECTOR_PUNCTUATION);
-			defCategory("Po", 1 << Character.OTHER_PUNCTUATION);
-			defCategory("Sm", 1 << Character.MATH_SYMBOL);
-			defCategory("Sc", 1 << Character.CURRENCY_SYMBOL);
-			defCategory("Sk", 1 << Character.MODIFIER_SYMBOL);
-			defCategory("So", 1 << Character.OTHER_SYMBOL);
-			defCategory("Pi", 1 << Character.INITIAL_QUOTE_PUNCTUATION);
-			defCategory("Pf", 1 << Character.FINAL_QUOTE_PUNCTUATION);
-			defCategory(
-					"L",
-					((1 << Character.UPPERCASE_LETTER)
-							| (1 << Character.LOWERCASE_LETTER)
-							| (1 << Character.TITLECASE_LETTER)
-							| (1 << Character.MODIFIER_LETTER) | (1 << Character.OTHER_LETTER)));
-			defCategory(
-					"M",
-					((1 << Character.NON_SPACING_MARK)
-							| (1 << Character.ENCLOSING_MARK) | (1 << Character.COMBINING_SPACING_MARK)));
-			defCategory(
-					"N",
-					((1 << Character.DECIMAL_DIGIT_NUMBER)
-							| (1 << Character.LETTER_NUMBER) | (1 << Character.OTHER_NUMBER)));
-			defCategory(
-					"Z",
-					((1 << Character.SPACE_SEPARATOR)
-							| (1 << Character.LINE_SEPARATOR) | (1 << Character.PARAGRAPH_SEPARATOR)));
-			defCategory(
-					"C",
-					((1 << Character.CONTROL) | (1 << Character.FORMAT)
-							| (1 << Character.PRIVATE_USE) | (1 << Character.SURROGATE))); // Other
-			defCategory(
-					"P",
-					((1 << Character.DASH_PUNCTUATION)
-							| (1 << Character.START_PUNCTUATION)
-							| (1 << Character.END_PUNCTUATION)
-							| (1 << Character.CONNECTOR_PUNCTUATION)
-							| (1 << Character.OTHER_PUNCTUATION)
-							| (1 << Character.INITIAL_QUOTE_PUNCTUATION) | (1 << Character.FINAL_QUOTE_PUNCTUATION)));
-			defCategory(
-					"S",
-					((1 << Character.MATH_SYMBOL)
-							| (1 << Character.CURRENCY_SYMBOL)
-							| (1 << Character.MODIFIER_SYMBOL) | (1 << Character.OTHER_SYMBOL)));
-			defCategory(
-					"LC",
-					((1 << Character.UPPERCASE_LETTER)
-							| (1 << Character.LOWERCASE_LETTER) | (1 << Character.TITLECASE_LETTER)));
-			defCategory(
-					"LD",
-					((1 << Character.UPPERCASE_LETTER)
-							| (1 << Character.LOWERCASE_LETTER)
-							| (1 << Character.TITLECASE_LETTER)
-							| (1 << Character.MODIFIER_LETTER)
-							| (1 << Character.OTHER_LETTER) | (1 << Character.DECIMAL_DIGIT_NUMBER)));
-			defRange("L1", 0x00, 0xFF); // Latin-1
-			map.put("all", new CharPropertyFactory() {
-				@Override
-				CharProperty make() {
-					return new All();
-				}
-			});
-			// Posix regular expression character classes, defined in
-			// http://www.unix.org/onlinepubs/009695399/basedefs/xbd_chap09.html
-			defRange("ASCII", 0x00, 0x7F); // ASCII
-			defCtype("Alnum", ASCII.ALNUM); // Alphanumeric characters
-			defCtype("Alpha", ASCII.ALPHA); // Alphabetic characters
-			defCtype("Blank", ASCII.BLANK); // Space and tab characters
-			defCtype("Cntrl", ASCII.CNTRL); // Control characters
-			defRange("Digit", '0', '9'); // Numeric characters
-			defCtype("Graph", ASCII.GRAPH); // printable and visible
-			defRange("Lower", 'a', 'z'); // Lower-case alphabetic
-			defRange("Print", 0x20, 0x7E); // Printable characters
-			defCtype("Punct", ASCII.PUNCT); // Punctuation characters
-			defCtype("Space", ASCII.SPACE); // Space characters
-			defRange("Upper", 'A', 'Z'); // Upper-case alphabetic
-			defCtype("XDigit", ASCII.XDIGIT); // hexadecimal digits
-			// Java character properties, defined by methods in
-			// Character.java
-			defClone("javaLowerCase", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isLowerCase(ch);
-				}
-			});
-			defClone("javaUpperCase", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isUpperCase(ch);
-				}
-			});
-			defClone("javaAlphabetic", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isAlphabetic(ch);
-				}
-			});
-			defClone("javaIdeographic", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isIdeographic(ch);
-				}
-			});
-			defClone("javaTitleCase", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isTitleCase(ch);
-				}
-			});
-			defClone("javaDigit", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isDigit(ch);
-				}
-			});
-			defClone("javaDefined", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isDefined(ch);
-				}
-			});
-			defClone("javaLetter", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isLetter(ch);
-				}
-			});
-			defClone("javaLetterOrDigit", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isLetterOrDigit(ch);
-				}
-			});
-			defClone("javaJavaIdentifierStart", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isJavaIdentifierStart(ch);
-				}
-			});
-			defClone("javaJavaIdentifierPart", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isJavaIdentifierPart(ch);
-				}
-			});
-			defClone("javaUnicodeIdentifierStart", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isUnicodeIdentifierStart(ch);
-				}
-			});
-			defClone("javaUnicodeIdentifierPart", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isUnicodeIdentifierPart(ch);
-				}
-			});
-			defClone("javaIdentifierIgnorable", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isIdentifierIgnorable(ch);
-				}
-			});
-			defClone("javaSpaceChar", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isSpaceChar(ch);
-				}
-			});
-			defClone("javaWhitespace", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isWhitespace(ch);
-				}
-			});
-			defClone("javaISOControl", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isISOControl(ch);
-				}
-			});
-			defClone("javaMirrored", new CloneableProperty() {
-				@Override
-				boolean isSatisfiedBy(int ch) {
-					return Character.isMirrored(ch);
-				}
-			});
-		}
-	}
 	/**
 	 * Creates a predicate which can be used to match a string.
 	 *

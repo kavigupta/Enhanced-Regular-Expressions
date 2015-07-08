@@ -214,7 +214,8 @@ public final class Matcher implements MatchResult {
 		this.parentPattern = parent;
 		this.text = text;
 		// Allocate state storage
-		int parentGroupCount = Math.max(parent.capturingGroupCount, 10);
+		int parentGroupCount = Math.max(parent.registry.capturingGroupCount,
+				10);
 		groupsr = new ArrayList[parentGroupCount];
 		locals = new int[parent.localCount];
 		// Put fields into initial states
@@ -264,7 +265,8 @@ public final class Matcher implements MatchResult {
 			throw new IllegalArgumentException("Pattern cannot be null");
 		parentPattern = newPattern;
 		// Reallocate state storage
-		int parentGroupCount = Math.max(newPattern.capturingGroupCount, 10);
+		int parentGroupCount = Math.max(
+				newPattern.registry.capturingGroupCount, 10);
 		locals = new int[newPattern.localCount];
 		resetGroups(parentGroupCount);
 		for (int i = 0; i < locals.length; i++)
@@ -561,7 +563,7 @@ public final class Matcher implements MatchResult {
 	 */
 	@Override
 	public int groupCount() {
-		return parentPattern.capturingGroupCount - 1;
+		return parentPattern.registry.capturingGroupCount - 1;
 	}
 	/**
 	 * Attempts to match the entire region against the pattern.
@@ -812,10 +814,10 @@ public final class Matcher implements MatchResult {
 								"capturing group name {"
 										+ gname
 										+ "} starts with digit character");
-					if (!parentPattern.namedGroups().containsKey(gname))
+					if (!parentPattern.registry.groupDefined(gname))
 						throw new IllegalArgumentException(
 								"No group with name {" + gname + "}");
-					refNum = parentPattern.namedGroups().get(gname);
+					refNum = parentPattern.registry.groupNumber(gname);
 					cursor++;
 				} else {
 					// The first number is always a group
@@ -1197,7 +1199,7 @@ public final class Matcher implements MatchResult {
 		this.oldLast = oldLast < 0 ? from : oldLast;
 		resetGroups(groupsr.length);
 		acceptMode = NOANCHOR;
-		boolean result = parentPattern.root.match(this, from, text);
+		boolean result = parentPattern.unproc.root.match(this, from, text);
 		if (!result) this.first = -1;
 		this.oldLast = this.last;
 		sortGroups();
@@ -1261,10 +1263,10 @@ public final class Matcher implements MatchResult {
 	int getMatchedGroupIndex(String name) {
 		Objects.requireNonNull(name, "Group name");
 		if (first < 0) throw new IllegalStateException("No match found");
-		if (!parentPattern.namedGroups().containsKey(name))
+		if (!parentPattern.registry.groupDefined(name))
 			throw new IllegalArgumentException("No group with name <" + name
 					+ ">");
-		return parentPattern.namedGroups().get(name);
+		return parentPattern.registry.groupNumber(name);
 	}
 	@SuppressWarnings("unchecked")
 	private void resetGroups(int parentGroupCount) {

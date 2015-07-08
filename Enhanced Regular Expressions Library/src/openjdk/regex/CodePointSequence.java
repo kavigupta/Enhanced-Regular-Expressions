@@ -1,8 +1,8 @@
 package openjdk.regex;
 
-import static openjdk.regex.Pattern.COMMENTS;
-import static openjdk.regex.Pattern.UNIX_LINES;
+import static openjdk.regex.Pattern.*;
 
+import java.text.Normalizer;
 import java.util.Arrays;
 import java.util.function.Supplier;
 
@@ -13,13 +13,233 @@ public class CodePointSequence {
 	 */
 	transient int patternLength;
 	private final Supplier<Integer> flags;
-	private final ErrorProvider errors;
 	int cursor;
-	public CodePointSequence(Supplier<Integer> flags, int cursor,
-			ErrorProvider errors) {
+	public CodePointSequence(Supplier<Integer> flags, int cursor) {
 		this.flags = flags;
 		this.cursor = cursor;
-		this.errors = errors;
+	}
+	public boolean compile(String pattern) {
+		String normalizedPattern;
+		// Handle canonical equivalences
+		if (has(flags.get(), CANON_EQ) && !has(flags.get(), LITERAL)) {
+			normalizedPattern = normalize(pattern);
+		} else {
+			normalizedPattern = pattern;
+		}
+		patternLength = normalizedPattern.length();
+		// Copy pattern to int array for convenience
+		// Use double zero to terminate pattern
+		temp = new int[patternLength + 2];
+		boolean hasSupplementary = false;
+		int c, count = 0;
+		// Convert all chars into code points
+		for (int x = 0; x < patternLength; x += Character.charCount(c)) {
+			c = normalizedPattern.codePointAt(x);
+			if (isSupplementary(c)) {
+				hasSupplementary = true;
+			}
+			temp[count++] = c;
+		}
+		patternLength = count; // patternLength now in code points
+		if (!has(flags.get(), LITERAL)) RemoveQEQuoting();
+		return hasSupplementary;
+	}
+	/**
+	 * The pattern is converted to normalizedD form and then a pure group
+	 * is constructed to match canonical equivalences of the characters.
+	 */
+	private String normalize(String pattern) {
+		int lastCodePoint = -1;
+		// Convert pattern into normalizedD form
+		String normalizedPattern = Normalizer.normalize(pattern,
+				Normalizer.Form.NFD);
+		patternLength = normalizedPattern.length();
+		// Modify pattern to match canonical equivalences
+		StringBuilder newPattern = new StringBuilder(patternLength);
+		for (int i = 0; i < patternLength;) {
+			int c = normalizedPattern.codePointAt(i);
+			StringBuilder sequenceBuffer;
+			if ((Character.getType(c) == Character.NON_SPACING_MARK)
+					&& (lastCodePoint != -1)) {
+				sequenceBuffer = new StringBuilder();
+				sequenceBuffer.appendCodePoint(lastCodePoint);
+				sequenceBuffer.appendCodePoint(c);
+				while (Character.getType(c) == Character.NON_SPACING_MARK) {
+					i += Character.charCount(c);
+					if (i >= patternLength) break;
+					c = normalizedPattern.codePointAt(i);
+					sequenceBuffer.appendCodePoint(c);
+				}
+				String ea = produceEquivalentAlternation(sequenceBuffer
+						.toString());
+				newPattern.setLength(newPattern.length()
+						- Character.charCount(lastCodePoint));
+				newPattern.append("(?:").append(ea).append(")");
+			} else if (c == '[' && lastCodePoint != '\\') {
+				i = normalizeCharClass(normalizedPattern, newPattern, i);
+			} else {
+				newPattern.appendCodePoint(c);
+			}
+			lastCodePoint = c;
+			i += Character.charCount(c);
+		}
+		return newPattern.toString();
+	}
+	/**
+	 * Complete the character class being parsed and add a set
+	 * of alternations to it that will match the canonical equivalences
+	 * of the characters within the class.
+	 */
+	private int normalizeCharClass(String normalizedPattern,
+			StringBuilder newPattern, int i) {
+		StringBuilder charClass = new StringBuilder();
+		StringBuilder eq = null;
+		int lastCodePoint = -1;
+		String result;
+		i++;
+		charClass.append("[");
+		while (true) {
+			int c = normalizedPattern.codePointAt(i);
+			StringBuilder sequenceBuffer;
+			if (c == ']' && lastCodePoint != '\\') {
+				charClass.append((char) c);
+				break;
+			} else if (Character.getType(c) == Character.NON_SPACING_MARK) {
+				sequenceBuffer = new StringBuilder();
+				sequenceBuffer.appendCodePoint(lastCodePoint);
+				while (Character.getType(c) == Character.NON_SPACING_MARK) {
+					sequenceBuffer.appendCodePoint(c);
+					i += Character.charCount(c);
+					if (i >= normalizedPattern.length()) break;
+					c = normalizedPattern.codePointAt(i);
+				}
+				String ea = produceEquivalentAlternation(sequenceBuffer
+						.toString());
+				charClass.setLength(charClass.length()
+						- Character.charCount(lastCodePoint));
+				if (eq == null) eq = new StringBuilder();
+				eq.append('|');
+				eq.append(ea);
+			} else {
+				charClass.appendCodePoint(c);
+				i++;
+			}
+			if (i == normalizedPattern.length())
+				throw error("Unclosed character class");
+			lastCodePoint = c;
+		}
+		if (eq != null) {
+			result = "(?:" + charClass.toString() + eq.toString() + ")";
+		} else {
+			result = charClass.toString();
+		}
+		newPattern.append(result);
+		return i;
+	}
+	/**
+	 * Given a specific sequence composed of a regular character and
+	 * combining marks that follow it, produce the alternation that will
+	 * match all canonical equivalences of that sequence.
+	 */
+	private String produceEquivalentAlternation(String source) {
+		int len = countChars(source, 0, 1);
+		if (source.length() == len)
+		// source has one character.
+			return source;
+		String base = source.substring(0, len);
+		String combiningMarks = source.substring(len);
+		String[] perms = producePermutations(combiningMarks);
+		StringBuilder result = new StringBuilder(source);
+		// Add combined permutations
+		for (int x = 0; x < perms.length; x++) {
+			String next = base + perms[x];
+			if (x > 0) result.append("|" + next);
+			next = composeOneStep(next);
+			if (next != null)
+				result.append("|" + produceEquivalentAlternation(next));
+		}
+		return result.toString();
+	}
+	/**
+	 * Returns an array of strings that have all the possible
+	 * permutations of the characters in the input string.
+	 * This is used to get a list of all possible orderings
+	 * of a set of combining marks. Note that some of the permutations
+	 * are invalid because of combining class collisions, and these
+	 * possibilities must be removed because they are not canonically
+	 * equivalent.
+	 */
+	private String[] producePermutations(String input) {
+		if (input.length() == countChars(input, 0, 1))
+			return new String[] { input };
+		if (input.length() == countChars(input, 0, 2)) {
+			int c0 = Character.codePointAt(input, 0);
+			int c1 = Character.codePointAt(input, Character.charCount(c0));
+			if (getClass(c1) == getClass(c0)) { return new String[] { input }; }
+			String[] result = new String[2];
+			result[0] = input;
+			StringBuilder sb = new StringBuilder(2);
+			sb.appendCodePoint(c1);
+			sb.appendCodePoint(c0);
+			result[1] = sb.toString();
+			return result;
+		}
+		int length = 1;
+		int nCodePoints = countCodePoints(input);
+		for (int x = 1; x < nCodePoints; x++)
+			length = length * (x + 1);
+		String[] temp = new String[length];
+		int combClass[] = new int[nCodePoints];
+		for (int x = 0, i = 0; x < nCodePoints; x++) {
+			int c = Character.codePointAt(input, i);
+			combClass[x] = getClass(c);
+			i += Character.charCount(c);
+		}
+		// For each char, take it out and add the permutations
+		// of the remaining chars
+		int index = 0;
+		int len;
+		// offset maintains the index in code units.
+		loop: for (int x = 0, offset = 0; x < nCodePoints; x++, offset += len) {
+			len = countChars(input, offset, 1);
+			for (int y = x - 1; y >= 0; y--) {
+				if (combClass[y] == combClass[x]) {
+					continue loop;
+				}
+			}
+			StringBuilder sb = new StringBuilder(input);
+			String otherChars = sb.delete(offset, offset + len).toString();
+			String[] subResult = producePermutations(otherChars);
+			String prefix = input.substring(offset, offset + len);
+			for (int y = 0; y < subResult.length; y++)
+				temp[index++] = prefix + subResult[y];
+		}
+		String[] result = new String[index];
+		for (int x = 0; x < index; x++)
+			result[x] = temp[x];
+		return result;
+	}
+	private int getClass(int c) {
+		return sun.text.Normalizer.getCombiningClass(c);
+	}
+	/**
+	 * Attempts to compose input by combining the first character
+	 * with the first combining mark following it. Returns a String
+	 * that is the composition of the leading character with its first
+	 * combining mark followed by the remaining combining marks. Returns
+	 * null if the first two characters cannot be further composed.
+	 */
+	private String composeOneStep(String input) {
+		int len = countChars(input, 0, 2);
+		String firstTwoCharacters = input.substring(0, len);
+		String result = Normalizer.normalize(firstTwoCharacters,
+				Normalizer.Form.NFC);
+		if (result.equals(firstTwoCharacters))
+			return null;
+		else {
+			String remainder = input.substring(len);
+			return result + remainder;
+		}
 	}
 	/**
 	 * Preprocess any \Q...\E sequences in `temp', meta-quoting them.
@@ -97,7 +317,7 @@ public class CodePointSequence {
 	 */
 	int peek() {
 		int ch = temp[cursor];
-		if (has(COMMENTS)) ch = peekPastWhitespace(ch);
+		if (has(flags.get(), COMMENTS)) ch = peekPastWhitespace(ch);
 		return ch;
 	}
 	/**
@@ -105,7 +325,7 @@ public class CodePointSequence {
 	 */
 	int read() {
 		int ch = temp[cursor++];
-		if (has(COMMENTS)) ch = parsePastWhitespace(ch);
+		if (has(flags.get(), COMMENTS)) ch = parsePastWhitespace(ch);
 		return ch;
 	}
 	/**
@@ -122,7 +342,7 @@ public class CodePointSequence {
 	 */
 	int next() {
 		int ch = temp[++cursor];
-		if (has(COMMENTS)) ch = peekPastWhitespace(ch);
+		if (has(flags.get(), COMMENTS)) ch = peekPastWhitespace(ch);
 		return ch;
 	}
 	/**
@@ -138,7 +358,7 @@ public class CodePointSequence {
 	 */
 	int c() {
 		if (cursor < patternLength) { return read() ^ 64; }
-		throw errors.error("Illegal control escape sequence");
+		throw error("Illegal control escape sequence");
 	}
 	/**
 	 * Utility method for parsing octal escape sequences.
@@ -158,7 +378,7 @@ public class CodePointSequence {
 			unread();
 			return (n - '0');
 		}
-		throw errors.error("Illegal octal escape sequence");
+		throw error("Illegal octal escape sequence");
 	}
 	/**
 	 * Utility method for parsing hexadecimal escape sequences.
@@ -174,13 +394,13 @@ public class CodePointSequence {
 			while (ASCII.isHexDigit(n = read())) {
 				ch = (ch << 4) + ASCII.toDigit(n);
 				if (ch > Character.MAX_CODE_POINT)
-					throw errors.error("Hexadecimal codepoint is too big");
+					throw error("Hexadecimal codepoint is too big");
 			}
 			if (n != '}')
-				throw errors.error("Unclosed hexadecimal escape sequence");
+				throw error("Unclosed hexadecimal escape sequence");
 			return ch;
 		}
-		throw errors.error("Illegal hexadecimal escape sequence");
+		throw error("Illegal hexadecimal escape sequence");
 	}
 	/**
 	 * Utility method for parsing unicode escape sequences.
@@ -195,8 +415,7 @@ public class CodePointSequence {
 		int n = 0;
 		for (int i = 0; i < 4; i++) {
 			int ch = read();
-			if (!ASCII.isHexDigit(ch)) { throw errors
-					.error("Illegal Unicode escape sequence"); }
+			if (!ASCII.isHexDigit(ch)) { throw error("Illegal Unicode escape sequence"); }
 			n = n * 16 + ASCII.toDigit(ch);
 		}
 		return n;
@@ -219,8 +438,9 @@ public class CodePointSequence {
 	 */
 	void accept(int ch, String s) {
 		int testChar = temp[cursor++];
-		if (has(COMMENTS)) testChar = parsePastWhitespace(testChar);
-		if (ch != testChar) { throw errors.error(s); }
+		if (has(flags.get(), COMMENTS))
+			testChar = parsePastWhitespace(testChar);
+		if (ch != testChar) { throw error(s); }
 	}
 	/**
 	 * If in xmode peek past whitespace and comments.
@@ -268,7 +488,7 @@ public class CodePointSequence {
 	 * Determines if character is a line separator in the current mode
 	 */
 	private boolean isLineSeparator(int ch) {
-		if (has(UNIX_LINES)) {
+		if (has(flags.get(), UNIX_LINES)) {
 			return ch == '\n';
 		} else {
 			return (ch == '\n' || ch == '\r' || (ch | 1) == '\u2029' || ch == '\u0085');
@@ -289,7 +509,31 @@ public class CodePointSequence {
 	void unread() {
 		cursor--;
 	}
-	private boolean has(int f) {
-		return Pattern.has(flags.get(), f);
+	/** Check extra pattern characters */
+	void confirmEnding() {
+		if (patternLength == cursor) return;
+		throw error(peek() == ')' ? "Unmatched closing ')'"
+				: "Unexpected internal error");
+	}
+	/**
+	 * Internal method used for handling all syntax The pattern is
+	 * displayed with a pointer to aid in locating the syntax error.
+	 */
+	public PatternSyntaxException error(String s) {
+		return new PatternSyntaxException(s, new String(temp, 0,
+				patternLength), cursor - 1);
+	}
+	static final int countCodePoints(CharSequence seq) {
+		int length = seq.length();
+		int n = 0;
+		for (int i = 0; i < length;) {
+			n++;
+			if (Character.isHighSurrogate(seq.charAt(i++))) {
+				if (i < length && Character.isLowSurrogate(seq.charAt(i))) {
+					i++;
+				}
+			}
+		}
+		return n;
 	}
 }
