@@ -3,7 +3,7 @@ package openjdk.regex;
 import java.util.HashMap;
 import java.util.Map;
 
-class GroupRegistry {
+class GroupRegistry implements java.io.Serializable {
 	/**
 	 * Map the "name" of the "named capturing group" to its group id
 	 * node.
@@ -16,19 +16,17 @@ class GroupRegistry {
 	int capturingGroupCount;
 	public GroupRegistry() {
 		capturingGroupCount = 1;
-	}
-	Map<String, Integer> namedGroups() {
-		if (namedGroups == null) namedGroups = new HashMap<>(2);
-		return namedGroups;
+		namedGroups = new HashMap<>(2);
 	}
 	public boolean groupDefined(String name) {
-		return namedGroups().containsKey(name);
+		return namedGroups.containsKey(name);
 	}
 	public void addToEnd(String name) {
-		namedGroups().put(name, capturingGroupCount - 1);
+		namedGroups.put(name, capturingGroupCount - 1);
 	}
 	public void clear() {
-		namedGroups = null;
+		capturingGroupCount = 1;
+		namedGroups.clear();;
 	}
 	public int iterateCount() {
 		return capturingGroupCount++;

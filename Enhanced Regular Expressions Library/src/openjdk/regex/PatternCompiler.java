@@ -3,56 +3,145 @@ package openjdk.regex;
 import static openjdk.regex.Pattern.*;
 
 import java.util.Locale;
-import java.util.function.Supplier;
 
+import openjdk.regex.CharProperty.All;
 import openjdk.regex.CharProperty.BitClass;
 import openjdk.regex.CharProperty.Block;
 import openjdk.regex.CharProperty.Category;
 import openjdk.regex.CharProperty.Ctype;
+import openjdk.regex.CharProperty.Dot;
 import openjdk.regex.CharProperty.HorizWS;
 import openjdk.regex.CharProperty.Script;
+import openjdk.regex.CharProperty.UnixDot;
 import openjdk.regex.CharProperty.Utype;
 import openjdk.regex.CharProperty.VertWS;
 import openjdk.regex.Node.BackRef;
 import openjdk.regex.Node.Begin;
+import openjdk.regex.Node.Behind;
+import openjdk.regex.Node.BehindS;
+import openjdk.regex.Node.BnM;
 import openjdk.regex.Node.Bound;
+import openjdk.regex.Node.Branch;
+import openjdk.regex.Node.BranchConn;
 import openjdk.regex.Node.CIBackRef;
+import openjdk.regex.Node.Caret;
 import openjdk.regex.Node.Curly;
 import openjdk.regex.Node.Dollar;
 import openjdk.regex.Node.End;
+import openjdk.regex.Node.First;
+import openjdk.regex.Node.GroupCurly;
+import openjdk.regex.Node.GroupHead;
+import openjdk.regex.Node.GroupTail;
 import openjdk.regex.Node.LastMatch;
+import openjdk.regex.Node.LazyLoop;
 import openjdk.regex.Node.LineEnding;
+import openjdk.regex.Node.Loop;
+import openjdk.regex.Node.Neg;
+import openjdk.regex.Node.NotBehind;
+import openjdk.regex.Node.NotBehindS;
+import openjdk.regex.Node.Pos;
+import openjdk.regex.Node.Prolog;
 import openjdk.regex.Node.Ques;
+import openjdk.regex.Node.Slice;
+import openjdk.regex.Node.SliceI;
+import openjdk.regex.Node.SliceIS;
+import openjdk.regex.Node.SliceS;
+import openjdk.regex.Node.SliceU;
+import openjdk.regex.Node.SliceUS;
+import openjdk.regex.Node.Start;
+import openjdk.regex.Node.StartS;
+import openjdk.regex.Node.UnixCaret;
 import openjdk.regex.Node.UnixDollar;
+import openjdk.regex.Pattern.TreeInfo;
 
-public class UnprocessedPattern {
+public class PatternCompiler implements java.io.Serializable {
 	/**
 	 * Temporary storage used by parsing pattern slice.
 	 */
-	int[] buffer;
+	transient int[] buffer;
 	/**
 	 * Index into the pattern string that keeps track of how much has been
 	 * parsed.
 	 */
-	CodePointSequence codepoints;
+	transient CodePointSequence codepoints;
 	/**
 	 * If the Start node might possibly match supplementary characters.
 	 * It is set to true during compiling if
 	 * (1) There is supplementary char in pattern, or
 	 * (2) There is complement node of Category or Block
 	 */
-	boolean hasSupplementary;
+	transient boolean hasSupplementary;
+	/**
+	 * The local variable count used by parsing tree. Used by matchers to
+	 * allocate storage needed to perform a match.
+	 */
+	transient int localCount;
 	/**
 	 * The starting point of state machine for the find operation. This allows
 	 * a match to start anywhere in the input.
 	 */
 	transient Node root;
-	private final Supplier<Integer> flags;
-	private final GroupRegistry registry;
-	public UnprocessedPattern(Supplier<Integer> flags, GroupRegistry registry) {
-		this.flags = flags;
-		codepoints = new CodePointSequence(flags, 0);
-		this.registry = registry;
+	/**
+	 * The original pattern flags.
+	 *
+	 * @serial
+	 */
+	private int flags;
+	final GroupRegistry registry;
+	public PatternCompiler(int f) {
+		this.flags = f;
+		this.localCount = 0;
+		// to use UNICODE_CASE if UNICODE_CHARACTER_CLASS present
+		if ((flags & UNICODE_CHARACTER_CLASS) != 0) flags |= UNICODE_CASE;
+		codepoints = new CodePointSequence(this::flags, 0);
+		this.registry = new GroupRegistry();
+	}
+	/**
+	 * Copies regular expression to an int array and invokes the parsing
+	 * of the expression which will create the object tree.
+	 */
+	public static CompiledPattern compile(String pattern, int flags) {
+		PatternCompiler pc = new PatternCompiler(flags);
+		Node matchRoot = pc.parse(pattern);
+		return new CompiledPattern(pc.root, matchRoot, pc.registry,
+				pc.localCount);
+	}
+	private Node parse(String pattern) {
+		hasSupplementary = codepoints.compile(pattern);
+		// Allocate all temporary objects here.
+		buffer = new int[32];
+		registry.clear();
+		final Node matchRoot;
+		if (has(LITERAL)) {
+			// Literal pattern handling
+			matchRoot = newSlice(codepoints.temp, codepoints.patternLength,
+					hasSupplementary);
+			matchRoot.next = lastAccept;
+		} else {
+			// Start recursive descent parsing
+			matchRoot = expr(lastAccept);
+			codepoints.confirmEnding();
+		}
+		// Peephole optimization
+		if (matchRoot instanceof Slice) {
+			root = BnM.optimize(matchRoot);
+			if (root == matchRoot) {
+				root = hasSupplementary ? new StartS(matchRoot)
+						: new Start(matchRoot);
+			}
+		} else if (matchRoot instanceof Begin || matchRoot instanceof First) {
+			root = matchRoot;
+		} else {
+			root = hasSupplementary ? new StartS(matchRoot) : new Start(
+					matchRoot);
+		}
+		codepoints.temp = null;
+		buffer = null;
+		codepoints.patternLength = 0;
+		return matchRoot;
+	}
+	public int flags() {
+		return flags;
 	}
 	void append(int ch, int len) {
 		if (len >= buffer.length) {
@@ -61,6 +150,249 @@ public class UnprocessedPattern {
 			buffer = tmp;
 		}
 		buffer[len] = ch;
+	}
+	/**
+	 * The expression is parsed with branch nodes added for alternations.
+	 * This may be called recursively to parse sub expressions that may
+	 * contain alternations.
+	 */
+	Node expr(Node end) {
+		Node prev = null;
+		Node firstTail = null;
+		Branch branch = null;
+		Node branchConn = null;
+		for (;;) {
+			Node node = sequence(end);
+			Node nodeTail = root; // double return
+			if (prev == null) {
+				prev = node;
+				firstTail = nodeTail;
+			} else {
+				// Branch
+				if (branchConn == null) {
+					branchConn = new BranchConn();
+					branchConn.next = end;
+				}
+				if (node == end) {
+					// if the node returned from sequence() is "end"
+					// we have an empty expr, set a null atom into
+					// the branch to indicate to go "next" directly.
+					node = null;
+				} else {
+					// the "tail.next" of each atom goes to branchConn
+					nodeTail.next = branchConn;
+				}
+				if (prev == branch) {
+					branch.add(node);
+				} else {
+					if (prev == end) {
+						prev = null;
+					} else {
+						// replace the "end" with "branchConn" at its
+						// tail.next
+						// when put the "prev" into the branch as the
+						// first atom.
+						firstTail.next = branchConn;
+					}
+					prev = branch = new Branch(prev, node, branchConn);
+				}
+			}
+			if (codepoints.peek() != '|') { return prev; }
+			codepoints.next();
+		}
+	}
+	@SuppressWarnings("fallthrough")
+	/**
+	 * Parsing of sequences between alternations.
+	 */
+	private Node sequence(Node end) {
+		Node head = null;
+		Node tail = null;
+		Node node = null;
+		LOOP: for (;;) {
+			int ch = codepoints.peek();
+			switch (ch) {
+				case '(':
+					// Because group handles its own closure,
+					// we need to treat it differently
+					node = group0();
+					// Check for comment or flag group
+					if (node == null) continue;
+					if (head == null)
+						head = node;
+					else tail.next = node;
+					// Double return: Tail was returned in root
+					tail = root;
+					continue;
+				case '[':
+					node = clazz(true);
+					break;
+				case '\\':
+					ch = codepoints.nextEscaped();
+					if (ch == 'p' || ch == 'P') {
+						boolean oneLetter = true;
+						boolean comp = (ch == 'P');
+						ch = codepoints.next(); // Consume { if
+											// present
+						if (ch != '{') {
+							codepoints.unread();
+						} else {
+							oneLetter = false;
+						}
+						node = family(oneLetter, comp);
+					} else {
+						codepoints.unread();
+						node = atom();
+					}
+					break;
+				case '^':
+					codepoints.next();
+					if (has(MULTILINE)) {
+						if (has(UNIX_LINES))
+							node = new UnixCaret();
+						else node = new Caret();
+					} else {
+						node = new Begin();
+					}
+					break;
+				case '$':
+					codepoints.next();
+					if (has(UNIX_LINES))
+						node = new UnixDollar(has(MULTILINE));
+					else node = new Dollar(has(MULTILINE));
+					break;
+				case '.':
+					codepoints.next();
+					if (has(DOTALL)) {
+						node = new All();
+					} else {
+						if (has(UNIX_LINES))
+							node = new UnixDot();
+						else {
+							node = new Dot();
+						}
+					}
+					break;
+				case '|':
+				case ')':
+					break LOOP;
+				case ']': // Now interpreting dangling ] and } as literals
+				case '}':
+					node = atom();
+					break;
+				case '?':
+				case '*':
+				case '+':
+					codepoints.next();
+					throw codepoints.error("Dangling meta character '"
+							+ ((char) ch) + "'");
+				case 0:
+					if (codepoints.cursor >= codepoints.patternLength) {
+						break LOOP;
+					}
+					// Fall through
+				default:
+					node = atom();
+					break;
+			}
+			node = closure(node);
+			if (head == null) {
+				head = tail = node;
+			} else {
+				tail.next = node;
+				tail = node;
+			}
+		}
+		if (head == null) { return end; }
+		tail.next = end;
+		root = tail; // double return
+		return head;
+	}
+	@SuppressWarnings("fallthrough")
+	/**
+	 * Parse and add a new Single or Slice.
+	 */
+	private Node atom() {
+		int first = 0;
+		int prev = -1;
+		boolean hasSupplementary = false;
+		int ch = codepoints.peek();
+		for (;;) {
+			switch (ch) {
+				case '*':
+				case '+':
+				case '?':
+				case '{':
+					if (first > 1) {
+						codepoints.cursor = prev; // Unwind one
+												// character
+						first--;
+					}
+					break;
+				case '$':
+				case '.':
+				case '^':
+				case '(':
+				case '[':
+				case '|':
+				case ')':
+					break;
+				case '\\':
+					ch = codepoints.nextEscaped();
+					if (ch == 'p' || ch == 'P') { // Property
+						if (first > 0) { // Slice is waiting; handle it
+										// first
+							codepoints.unread();
+							break;
+						} else { // No slice; just return the family node
+							boolean comp = (ch == 'P');
+							boolean oneLetter = true;
+							ch = codepoints.next(); // Consume {
+												// if
+							// present
+							if (ch != '{')
+								codepoints.unread();
+							else oneLetter = false;
+							return family(oneLetter, comp);
+						}
+					}
+					codepoints.unread();
+					prev = codepoints.cursor;
+					ch = escape(false, first == 0, false);
+					if (ch >= 0) {
+						append(ch, first);
+						first++;
+						if (isSupplementary(ch)) {
+							hasSupplementary = true;
+						}
+						ch = codepoints.peek();
+						continue;
+					} else if (first == 0) { return root; }
+					// Unwind meta escape sequence
+					codepoints.cursor = prev;
+					break;
+				case 0:
+					if (codepoints.cursor >= codepoints.patternLength) {
+						break;
+					}
+					// Fall through
+				default:
+					prev = codepoints.cursor;
+					append(ch, first);
+					first++;
+					if (isSupplementary(ch)) {
+						hasSupplementary = true;
+					}
+					ch = codepoints.next();
+					continue;
+			}
+			break;
+		}
+		if (first == 1) {
+			return newSingle(buffer[0], flags);
+		} else {
+			return newSlice(buffer, first, hasSupplementary);
+		}
 	}
 	/**
 	 * Parses a backref greedily, taking as many numbers as it
@@ -488,8 +820,8 @@ public class UnprocessedPattern {
 						ch == 0x53 || ch == 0x73 || // S and s
 						ch == 0x4b || ch == 0x6b || // K and k
 						ch == 0xc5 || ch == 0xe5))) // A+ring
-			return bits.add(ch, flags.get());
-		return newSingle(ch, flags.get());
+			return bits.add(ch, flags);
+		return newSingle(ch, flags);
 	}
 	/**
 	 * Parse a single character or a character range in a character class
@@ -666,6 +998,287 @@ public class UnprocessedPattern {
 		return sb.toString();
 	}
 	/**
+	 * Parses a group and returns the head node of a set of nodes that process
+	 * the group. Sometimes a double return system is used where the tail is
+	 * returned in root.
+	 */
+	private Node group0() {
+		boolean capturingGroup = false;
+		Node head = null;
+		Node tail = null;
+		int save = flags;
+		root = null;
+		int ch = codepoints.next();
+		if (ch == '?') {
+			ch = codepoints.skip();
+			switch (ch) {
+				case ':': // (?:xxx) pure group
+					head = createGroup(true);
+					tail = root;
+					head.next = expr(tail);
+					break;
+				case '=': // (?=xxx) and (?!xxx) lookahead
+				case '!':
+					head = createGroup(true);
+					tail = root;
+					head.next = expr(tail);
+					if (ch == '=') {
+						head = tail = new Pos(head);
+					} else {
+						head = tail = new Neg(head);
+					}
+					break;
+				case '>': // (?>xxx) independent group
+					head = createGroup(true);
+					tail = root;
+					head.next = expr(tail);
+					head = tail = new Ques(head, INDEPENDENT);
+					break;
+				case '<': // (?<xxx) look behind
+					ch = codepoints.read();
+					if (ASCII.isLower(ch) || ASCII.isUpper(ch)) {
+						// named captured group
+						String name = groupname(ch);
+						if (registry.groupDefined(name))
+							throw codepoints
+									.error("Named capturing group <"
+											+ name
+											+ "> is already defined");
+						capturingGroup = true;
+						head = createGroup(false);
+						tail = root;
+						registry.addToEnd(name);
+						head.next = expr(tail);
+						break;
+					}
+					int start = codepoints.cursor;
+					head = createGroup(true);
+					tail = root;
+					head.next = expr(tail);
+					tail.next = Node.lookbehindEnd;
+					TreeInfo info = new TreeInfo();
+					head.study(info);
+					if (info.maxValid == false) { throw codepoints
+							.error("Look-behind group does not have "
+									+ "an obvious maximum length"); }
+					boolean hasSupplementary = findSupplementary(start,
+							codepoints.patternLength);
+					if (ch == '=') {
+						head = tail = (hasSupplementary ? new BehindS(
+								head, info.maxLength, info.minLength)
+								: new Behind(head, info.maxLength,
+										info.minLength));
+					} else if (ch == '!') {
+						head = tail = (hasSupplementary ? new NotBehindS(
+								head, info.maxLength, info.minLength)
+								: new NotBehind(head, info.maxLength,
+										info.minLength));
+					} else {
+						throw codepoints
+								.error("Unknown look-behind group");
+					}
+					break;
+				case '$':
+				case '@':
+					throw codepoints.error("Unknown group type");
+				default: // (?xxx:) inlined match flags
+					codepoints.unread();
+					addFlag();
+					ch = codepoints.read();
+					if (ch == ')') { return null; // Inline modifier only
+					}
+					if (ch != ':') { throw codepoints
+							.error("Unknown inline modifier"); }
+					head = createGroup(true);
+					tail = root;
+					head.next = expr(tail);
+					break;
+			}
+		} else { // (xxx) a regular group
+			capturingGroup = true;
+			head = createGroup(false);
+			tail = root;
+			head.next = expr(tail);
+		}
+		codepoints.accept(')', "Unclosed group");
+		flags = save;
+		// Check for quantifiers
+		Node node = closure(head);
+		if (node == head) { // No closure
+			root = tail;
+			return node; // Dual return
+		}
+		if (head == tail) { // Zero length assertion
+			root = node;
+			return node; // Dual return
+		}
+		if (node instanceof Ques) {
+			Ques ques = (Ques) node;
+			if (ques.type == POSSESSIVE) {
+				root = node;
+				return node;
+			}
+			tail.next = new BranchConn();
+			tail = tail.next;
+			if (ques.type == GREEDY) {
+				head = new Branch(head, null, tail);
+			} else { // Reluctant quantifier
+				head = new Branch(null, head, tail);
+			}
+			root = tail;
+			return head;
+		} else if (node instanceof Curly) {
+			Curly curly = (Curly) node;
+			if (curly.type == POSSESSIVE) {
+				root = node;
+				return node;
+			}
+			// Discover if the group is deterministic
+			TreeInfo info = new TreeInfo();
+			if (head.study(info)) { // Deterministic
+				head = root = new GroupCurly(head.next, curly.cmin,
+						curly.cmax, curly.type,
+						((GroupTail) tail).localIndex,
+						((GroupTail) tail).groupIndex, capturingGroup);
+				return head;
+			} else { // Non-deterministic
+				int temp = ((GroupHead) head).localIndex;
+				Loop loop;
+				if (curly.type == GREEDY)
+					loop = new Loop(this.localCount, temp);
+				else // Reluctant Curly
+				loop = new LazyLoop(this.localCount, temp);
+				Prolog prolog = new Prolog(loop);
+				this.localCount += 1;
+				loop.cmin = curly.cmin;
+				loop.cmax = curly.cmax;
+				loop.body = head;
+				tail.next = loop;
+				root = loop;
+				return prolog; // Dual return
+			}
+		}
+		throw codepoints.error("Internal logic error");
+	}
+	/**
+	 * Create group head and tail nodes using double return. If the group is
+	 * created with anonymous true then it is a pure group and should not
+	 * affect group counting.
+	 */
+	private Node createGroup(boolean anonymous) {
+		int localIndex = localCount++;
+		int groupIndex = 0;
+		if (!anonymous) {
+			groupIndex = registry.iterateCount();
+		}
+		GroupHead head = new GroupHead(localIndex);
+		root = new GroupTail(localIndex, groupIndex);
+		return head;
+	}
+	@SuppressWarnings("fallthrough")
+	/**
+	 * Parses inlined match flags and set them appropriately.
+	 */
+	private void addFlag() {
+		int ch = codepoints.peek();
+		for (;;) {
+			switch (ch) {
+				case 'i':
+					flags |= CASE_INSENSITIVE;
+					break;
+				case 'm':
+					flags |= MULTILINE;
+					break;
+				case 's':
+					flags |= DOTALL;
+					break;
+				case 'd':
+					flags |= UNIX_LINES;
+					break;
+				case 'u':
+					flags |= UNICODE_CASE;
+					break;
+				case 'c':
+					flags |= CANON_EQ;
+					break;
+				case 'x':
+					flags |= COMMENTS;
+					break;
+				case 'U':
+					flags |= (UNICODE_CHARACTER_CLASS | UNICODE_CASE);
+					break;
+				case '-': // subFlag then fall through
+					ch = codepoints.next();
+					subFlag();
+				default:
+					return;
+			}
+			ch = codepoints.next();
+		}
+	}
+	@SuppressWarnings("fallthrough")
+	/**
+	 * Parses the second part of inlined match flags and turns off
+	 * flags appropriately.
+	 */
+	private void subFlag() {
+		int ch = codepoints.peek();
+		for (;;) {
+			switch (ch) {
+				case 'i':
+					flags &= ~CASE_INSENSITIVE;
+					break;
+				case 'm':
+					flags &= ~MULTILINE;
+					break;
+				case 's':
+					flags &= ~DOTALL;
+					break;
+				case 'd':
+					flags &= ~UNIX_LINES;
+					break;
+				case 'u':
+					flags &= ~UNICODE_CASE;
+					break;
+				case 'c':
+					flags &= ~CANON_EQ;
+					break;
+				case 'x':
+					flags &= ~COMMENTS;
+					break;
+				case 'U':
+					flags &= ~(UNICODE_CHARACTER_CLASS | UNICODE_CASE);
+				default:
+					return;
+			}
+			ch = codepoints.next();
+		}
+	}
+	/**
+	 * Utility method for creating a string slice matcher.
+	 */
+	Node newSlice(int[] buf, int count, boolean hasSupplementary) {
+		int[] tmp = new int[count];
+		if (has(CASE_INSENSITIVE)) {
+			if (has(UNICODE_CASE)) {
+				for (int i = 0; i < count; i++) {
+					tmp[i] = Character.toLowerCase(Character
+							.toUpperCase(buf[i]));
+				}
+				return hasSupplementary ? new SliceUS(tmp)
+						: new SliceU(tmp);
+			}
+			for (int i = 0; i < count; i++) {
+				tmp[i] = ASCII.toLower(buf[i]);
+			}
+			return hasSupplementary ? new SliceIS(tmp) : new SliceI(tmp);
+		}
+		for (int i = 0; i < count; i++) {
+			tmp[i] = buf[i];
+		}
+		return hasSupplementary ? new SliceS(tmp) : new Slice(tmp);
+	}
+	/**
 	 * Returns the set union of two CharProperty nodes.
 	 */
 	private static CharProperty union(final CharProperty lhs,
@@ -727,7 +1340,17 @@ public class UnprocessedPattern {
 			}
 		};
 	}
-	private boolean has(int flag) {
-		return Pattern.has(flags.get(), flag);
+	boolean has(int flag) {
+		return Pattern.has(flags, flag);
+	}
+	/**
+	 * Determines if there is any supplementary character or unpaired
+	 * surrogate in the specified range.
+	 */
+	private boolean findSupplementary(int start, int end) {
+		for (int i = start; i < end; i++) {
+			if (isSupplementary(codepoints.temp[i])) return true;
+		}
+		return false;
 	}
 }

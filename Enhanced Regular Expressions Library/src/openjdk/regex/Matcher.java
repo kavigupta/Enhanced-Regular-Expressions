@@ -214,10 +214,10 @@ public final class Matcher implements MatchResult {
 		this.parentPattern = parent;
 		this.text = text;
 		// Allocate state storage
-		int parentGroupCount = Math.max(parent.registry.capturingGroupCount,
-				10);
+		int parentGroupCount = Math.max(
+				parent.compiledPattern.registry.capturingGroupCount, 10);
 		groupsr = new ArrayList[parentGroupCount];
-		locals = new int[parent.localCount];
+		locals = new int[parent.compiledPattern.localCount];
 		// Put fields into initial states
 		reset();
 	}
@@ -265,9 +265,10 @@ public final class Matcher implements MatchResult {
 			throw new IllegalArgumentException("Pattern cannot be null");
 		parentPattern = newPattern;
 		// Reallocate state storage
-		int parentGroupCount = Math.max(
-				newPattern.registry.capturingGroupCount, 10);
-		locals = new int[newPattern.localCount];
+		int parentGroupCount = Math
+				.max(newPattern.compiledPattern.registry.capturingGroupCount,
+						10);
+		locals = new int[newPattern.compiledPattern.localCount];
 		resetGroups(parentGroupCount);
 		for (int i = 0; i < locals.length; i++)
 			locals[i] = -1;
@@ -563,7 +564,7 @@ public final class Matcher implements MatchResult {
 	 */
 	@Override
 	public int groupCount() {
-		return parentPattern.registry.capturingGroupCount - 1;
+		return parentPattern.compiledPattern.registry.capturingGroupCount - 1;
 	}
 	/**
 	 * Attempts to match the entire region against the pattern.
@@ -814,10 +815,12 @@ public final class Matcher implements MatchResult {
 								"capturing group name {"
 										+ gname
 										+ "} starts with digit character");
-					if (!parentPattern.registry.groupDefined(gname))
+					if (!parentPattern.compiledPattern.registry
+							.groupDefined(gname))
 						throw new IllegalArgumentException(
 								"No group with name {" + gname + "}");
-					refNum = parentPattern.registry.groupNumber(gname);
+					refNum = parentPattern.compiledPattern.registry
+							.groupNumber(gname);
 					cursor++;
 				} else {
 					// The first number is always a group
@@ -1199,7 +1202,8 @@ public final class Matcher implements MatchResult {
 		this.oldLast = oldLast < 0 ? from : oldLast;
 		resetGroups(groupsr.length);
 		acceptMode = NOANCHOR;
-		boolean result = parentPattern.unproc.root.match(this, from, text);
+		boolean result = parentPattern.compiledPattern.root.match(this, from,
+				text);
 		if (!result) this.first = -1;
 		this.oldLast = this.last;
 		sortGroups();
@@ -1219,7 +1223,8 @@ public final class Matcher implements MatchResult {
 		this.oldLast = oldLast < 0 ? from : oldLast;
 		resetGroups(groupsr.length);
 		acceptMode = anchor;
-		boolean result = parentPattern.matchRoot.match(this, from, text);
+		boolean result = parentPattern.compiledPattern.matchRoot.match(this,
+				from, text);
 		if (!result) this.first = -1;
 		this.oldLast = this.last;
 		return result;
@@ -1263,10 +1268,10 @@ public final class Matcher implements MatchResult {
 	int getMatchedGroupIndex(String name) {
 		Objects.requireNonNull(name, "Group name");
 		if (first < 0) throw new IllegalStateException("No match found");
-		if (!parentPattern.registry.groupDefined(name))
+		if (!parentPattern.compiledPattern.registry.groupDefined(name))
 			throw new IllegalArgumentException("No group with name <" + name
 					+ ">");
-		return parentPattern.registry.groupNumber(name);
+		return parentPattern.compiledPattern.registry.groupNumber(name);
 	}
 	@SuppressWarnings("unchecked")
 	private void resetGroups(int parentGroupCount) {

@@ -85,7 +85,7 @@ public class MatchCache implements MatchResult {
 	}
 	@Override
 	public int groupCount() {
-		return parentPattern.registry.capturingGroupCount - 1;
+		return parentPattern.compiledPattern.registry.capturingGroupCount - 1;
 	}
 	public CharSequence getRange(Range range) {
 		return getSubSequence(range.start, range.end);
@@ -96,10 +96,10 @@ public class MatchCache implements MatchResult {
 	int getMatchedGroupIndex(String name) {
 		Objects.requireNonNull(name, "Group name");
 		if (first < 0) throw new IllegalStateException("No match found");
-		if (!parentPattern.registry.groupDefined(name))
+		if (!parentPattern.compiledPattern.registry.groupDefined(name))
 			throw new IllegalArgumentException("No group with name <" + name
 					+ ">");
-		return parentPattern.registry.groupNumber(name);
+		return parentPattern.compiledPattern.registry.groupNumber(name);
 	}
 	@Override
 	public String toString() {

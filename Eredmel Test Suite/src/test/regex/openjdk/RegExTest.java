@@ -124,11 +124,12 @@ public class RegExTest {
 		for (int i = 0; i < spacesToAdd; i++)
 			paddedNameBuffer.append(" ");
 		String paddedName = paddedNameBuffer.toString();
-		if (failCount > 0)
-			throw new AssertionError(paddedName
-					+ ": "
-					+ (failCount == 0 ? "Passed" : "Failed(" + failCount
-							+ ")"));
+		if (failCount > 0) {
+			int fails = failCount;
+			failCount = 0;
+			throw new AssertionError(paddedName + ": "
+					+ ("Failed(" + fails + ")"));
+		}
 		failCount = 0;
 	}
 	/**
@@ -1032,8 +1033,8 @@ public class RegExTest {
 		Pattern serializedPattern = (Pattern) ois.readObject();
 		ois.close();
 		Matcher matcher = serializedPattern.matcher(matchStr);
-		if (!matcher.matches()) failCount++;
-		if (matcher.groupCount() != 1) failCount++;
+		assertTrue("Matcher matches", matcher.matches());
+		assertEquals("Single Group", 1, matcher.groupCount());
 		report("Serialization");
 	}
 	@Test
@@ -1471,7 +1472,7 @@ public class RegExTest {
 				patternToBe.append((char) (97 + i % 26));
 			Pattern.compile(patternToBe.toString());
 		} catch (PatternSyntaxException e) {
-			failCount++;
+			throw new AssertionError(e);
 		}
 		// Supplementary character test
 		try {
@@ -1485,7 +1486,7 @@ public class RegExTest {
 								+ 97 + i % 26));
 			Pattern.compile(patternToBe.toString());
 		} catch (PatternSyntaxException e) {
-			failCount++;
+			throw new AssertionError(e);
 		}
 		report("LongPattern");
 	}
