@@ -1,6 +1,10 @@
 package test.regex.multiplecap;
 
 import static org.junit.Assert.assertEquals;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+
 import openjdk.regex.Matcher;
 import openjdk.regex.Pattern;
 
@@ -20,13 +24,25 @@ public class MultipleCapturesTest {
 	public void charclasssTest() {
 		assertCorrectIterations("([a-f])+", "abcdefghi", 1, "a", "b", "c",
 				"d", "e", "f");
+		assertCorrectIterations("(([0-9]+)[^0-9]*)+", "1 2 345 12", 2, "1",
+				"2", "345", "12");
+	}
+	@Test
+	public void backtrackTest() {
 		assertCorrectIterations("(.())+b", "abcdefghi", 2, "");
 		assertCorrectIterations("(.())*b", "abcdefghi", 2, "");
 		assertCorrectIterations("a(.()+)+e", "abcdefghi", 2, "", "", "");
 		assertCorrectIterations("a(.()+)?b", "abcdefghi", 2);
 		assertCorrectIterations("a(.()+)?c", "abcdefghi", 2, "");
-		assertCorrectIterations("(([0-9]+)[^0-9]*)+", "1 2 345 12", 2, "1",
-				"2", "345", "12");
+		assertCorrectIterations("(([a-z](?<cap>))+y)+z", "aeyzeyz", "cap",
+				"", "", "", "", "");
+	}
+	@Test
+	public void doubleBacktrackTest() {
+		assertCorrectIterations("((?<cap>[a-z]())+y)+z", "aeyzeey", "cap",
+				"a", "e");
+		assertCorrectIterations("(([a-z](?<cap>))+y)+z", "aeyzey", "cap", "",
+				"");
 	}
 	@Test
 	public void orTest() {
@@ -45,23 +61,21 @@ public class MultipleCapturesTest {
 			int group, String... captures) {
 		Matcher mat = Pattern.compile(regex).matcher(text);
 		mat.find();
-		assertEquals("Iteration Count", captures.length,
-				mat.iterations(group));
-		for (int i = 0; i < captures.length; i++) {
-			assertEquals(i + "th iteration", captures[i],
-					mat.getRange(mat.range(group, i)));
+		ArrayList<String> actualCaps = new ArrayList<>();
+		for (int i = 0; i < mat.iterations(group); i++) {
+			actualCaps.add(mat.getRange(mat.range(group, i)).toString());
 		}
+		assertEquals(mat.toString(), Arrays.asList(captures), actualCaps);
 	}
 	public static void assertCorrectIterations(String regex, String text,
 			String group, String... captures) {
 		Matcher mat = Pattern.compile(regex).matcher(text);
 		mat.find();
-		System.out.println(mat.group());
-		assertEquals("Iteration Count", captures.length,
-				mat.iterations(group));
-		for (int i = 0; i < captures.length; i++) {
-			assertEquals(i + "th iteration", captures[i],
-					mat.getRange(mat.range(group, i)));
+		ArrayList<String> actualCaps = new ArrayList<>();
+		for (int i = 0; i < mat.iterations(group); i++) {
+			actualCaps.add(mat.getRange(mat.range(group, i)).toString());
 		}
+		System.out.println("Actual Caps " + actualCaps);
+		assertEquals(mat.toString(), Arrays.asList(captures), actualCaps);
 	}
 }

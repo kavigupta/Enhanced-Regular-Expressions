@@ -28,7 +28,7 @@ public class Range implements Comparable<Range> {
 	}
 	@Override
 	public String toString() {
-		return "Range [start=" + start + ", end=" + end + "]";
+		return "(" + start + ", " + end + ")";
 	}
 	@Override
 	public Object clone() throws CloneNotSupportedException {

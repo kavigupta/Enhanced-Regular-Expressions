@@ -25,6 +25,7 @@
 package openjdk.regex;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.TreeSet;
 
@@ -125,6 +126,7 @@ public final class Matcher implements MatchResult {
 		groupsr[i].add(of);
 	}
 	void removeGroup(int i) {
+		System.out.println("Cleaning: " + (i));
 		groupsr[i].remove(groupsr[i].size() - 1);
 	}
 	/**
@@ -1283,6 +1285,7 @@ public final class Matcher implements MatchResult {
 			groupsr[i] = new ArrayList<>();
 	}
 	private void sortGroups() {
+		System.out.println(Arrays.toString(groupsr));
 		ArrayList<Range> zero = new ArrayList<>();
 		zero.add(range(0));
 		groupsr[0] = zero;

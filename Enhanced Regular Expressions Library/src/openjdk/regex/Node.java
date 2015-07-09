@@ -3,6 +3,7 @@ package openjdk.regex;
 import static openjdk.regex.Pattern.*;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 
 import openjdk.regex.Pattern.TreeInfo;
 
@@ -556,14 +557,18 @@ class Node extends Object {
 			this.groupIndex = group;
 			this.capture = capture;
 		}
+		@SuppressWarnings("unchecked")
 		@Override
 		boolean match(Matcher matcher, int i, CharSequence seq) {
-			ArrayList<Range>[] groupsr = matcher.groupsr;
+			ArrayList<Range>[] save = null;
 			int[] locals = matcher.locals;
 			int save0 = locals[localIndex];
-			ArrayList<Range> saver = new ArrayList<Range>();
 			if (capture) {
-				saver = new ArrayList<>(groupsr[groupIndex / 2]);
+				save = new ArrayList[matcher.groupsr.length];
+				for (int j = 0; j < matcher.groupsr.length; j++) {
+					save[j] = (ArrayList<Range>) matcher.groupsr[j]
+							.clone();
+				}
 			}
 			// Notify GroupTail there is no need to setup group info
 			// because it will be set here
@@ -593,7 +598,7 @@ class Node extends Object {
 			if (!ret) {
 				locals[localIndex] = save0;
 				if (capture) {
-					groupsr[groupIndex / 2] = saver;
+					matcher.groupsr = save;
 				}
 			}
 			return ret;
@@ -672,11 +677,16 @@ class Node extends Object {
 		}
 		@Override
 		public void clean(Matcher mat) {
+			System.out.println(Arrays.toString(mat.groupsr));
 			mat.removeGroup(groupIndex / 2);
+			System.out.println("THIS: " + this);
 			System.out.println("NEXT: " + next);
 			for (Node n = atom; n != null && n.next.next != null; n = n.next) {
+				System.out.println("Cleaning " + n);
+				System.out.println(Arrays.toString(mat.groupsr));
 				n.clean(mat);
 			}
+			System.out.println(Arrays.toString(mat.groupsr));
 		}
 		@Override
 		boolean study(TreeInfo info) {
