@@ -124,6 +124,9 @@ public final class Matcher implements MatchResult {
 		// throw new RuntimeException();
 		groupsr[i].add(of);
 	}
+	void removeGroup(int i) {
+		groupsr[i].remove(groupsr[i].size() - 1);
+	}
 	/**
 	 * The range within the sequence that is to be matched. Anchors
 	 * will match at these "hard" boundaries. Changing the region
@@ -1194,7 +1197,7 @@ public final class Matcher implements MatchResult {
 	 * calls to the search methods start at a new "soft" boundary which is
 	 * the end of the previous match.
 	 */
-	boolean search(int from) {
+	private boolean search(int from) {
 		this.hitEnd = false;
 		this.requireEnd = false;
 		from = from < 0 ? 0 : from;
@@ -1215,7 +1218,7 @@ public final class Matcher implements MatchResult {
 	 * root of the state machine is called. The state machine will hold the
 	 * state of the match as it proceeds in this matcher.
 	 */
-	boolean match(int from, int anchor) {
+	private boolean match(int from, int anchor) {
 		this.hitEnd = false;
 		this.requireEnd = false;
 		from = from < 0 ? 0 : from;
@@ -1249,7 +1252,7 @@ public final class Matcher implements MatchResult {
 	 *        the ending index, exclusive
 	 * @return A String generated from this Matcher's input
 	 */
-	CharSequence getSubSequence(int beginIndex, int endIndex) {
+	private CharSequence getSubSequence(int beginIndex, int endIndex) {
 		return text.subSequence(beginIndex, endIndex);
 	}
 	/**
@@ -1265,7 +1268,7 @@ public final class Matcher implements MatchResult {
 	 *
 	 * @return the index of the named-capturing group
 	 */
-	int getMatchedGroupIndex(String name) {
+	private int getMatchedGroupIndex(String name) {
 		Objects.requireNonNull(name, "Group name");
 		if (first < 0) throw new IllegalStateException("No match found");
 		if (!parentPattern.compiledPattern.registry.groupDefined(name))

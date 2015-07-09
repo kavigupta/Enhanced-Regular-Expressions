@@ -20,6 +20,11 @@ public class MultipleCapturesTest {
 	public void charclasssTest() {
 		assertCorrectIterations("([a-f])+", "abcdefghi", 1, "a", "b", "c",
 				"d", "e", "f");
+		assertCorrectIterations("(.())+b", "abcdefghi", 2, "");
+		assertCorrectIterations("(.())*b", "abcdefghi", 2, "");
+		assertCorrectIterations("a(.()+)+e", "abcdefghi", 2, "", "", "");
+		assertCorrectIterations("a(.()+)?b", "abcdefghi", 2);
+		assertCorrectIterations("a(.()+)?c", "abcdefghi", 2, "");
 		assertCorrectIterations("(([0-9]+)[^0-9]*)+", "1 2 345 12", 2, "1",
 				"2", "345", "12");
 	}

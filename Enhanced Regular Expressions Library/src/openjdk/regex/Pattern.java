@@ -1593,6 +1593,8 @@ public final class Pattern implements java.io.Serializable {
 		} else {
 			compiledPattern = PatternCompiler.compile(p, f);
 		}
+		// System.out.println(pattern);
+		// printObjectTree(compiledPattern.matchRoot);
 	}
 	/**
 	 * Used to print out a subtree of the Pattern to help with debugging.

@@ -58,36 +58,36 @@ public class PatternCompiler implements java.io.Serializable {
 	/**
 	 * Temporary storage used by parsing pattern slice.
 	 */
-	transient int[] buffer;
+	private transient int[] buffer;
 	/**
 	 * Index into the pattern string that keeps track of how much has been
 	 * parsed.
 	 */
-	transient CodePointSequence codepoints;
+	private transient CodePointSequence codepoints;
 	/**
 	 * If the Start node might possibly match supplementary characters.
 	 * It is set to true during compiling if
 	 * (1) There is supplementary char in pattern, or
 	 * (2) There is complement node of Category or Block
 	 */
-	transient boolean hasSupplementary;
+	private transient boolean hasSupplementary;
 	/**
 	 * The local variable count used by parsing tree. Used by matchers to
 	 * allocate storage needed to perform a match.
 	 */
-	transient int localCount;
+	private transient int localCount;
 	/**
 	 * The starting point of state machine for the find operation. This allows
 	 * a match to start anywhere in the input.
 	 */
-	transient Node root;
+	private transient Node root;
 	/**
 	 * The original pattern flags.
 	 *
 	 * @serial
 	 */
 	private int flags;
-	final GroupRegistry registry;
+	private final GroupRegistry registry;
 	public PatternCompiler(int f) {
 		this.flags = f;
 		this.localCount = 0;
@@ -143,7 +143,7 @@ public class PatternCompiler implements java.io.Serializable {
 	public int flags() {
 		return flags;
 	}
-	void append(int ch, int len) {
+	private void append(int ch, int len) {
 		if (len >= buffer.length) {
 			int[] tmp = new int[len + len];
 			System.arraycopy(buffer, 0, tmp, 0, len);
@@ -156,7 +156,7 @@ public class PatternCompiler implements java.io.Serializable {
 	 * This may be called recursively to parse sub expressions that may
 	 * contain alternations.
 	 */
-	Node expr(Node end) {
+	private Node expr(Node end) {
 		Node prev = null;
 		Node firstTail = null;
 		Branch branch = null;
@@ -442,7 +442,7 @@ public class PatternCompiler implements java.io.Serializable {
 	 * If the returned value is greater than zero, it is the value that
 	 * matches the escape sequence.
 	 */
-	int escape(boolean inclass, boolean create, boolean isrange) {
+	private int escape(boolean inclass, boolean create, boolean isrange) {
 		int ch = codepoints.skip();
 		switch (ch) {
 			case '0':
@@ -631,7 +631,7 @@ public class PatternCompiler implements java.io.Serializable {
 	 * then new nodes must be appended to handle the repetition.
 	 * Prev could be a single or a group, so it could be a chain of nodes.
 	 */
-	Node closure(Node prev) {
+	private Node closure(Node prev) {
 		int ch = codepoints.peek();
 		switch (ch) {
 			case '?':
@@ -715,7 +715,7 @@ public class PatternCompiler implements java.io.Serializable {
 	 * is true except for the case of [abc&&def] where def is a separate
 	 * right hand node with "understood" brackets.
 	 */
-	CharProperty clazz(boolean consume) {
+	private CharProperty clazz(boolean consume) {
 		CharProperty prev = null;
 		CharProperty node = null;
 		BitClass bits = new BitClass();
@@ -875,7 +875,7 @@ public class PatternCompiler implements java.io.Serializable {
 	/**
 	 * Parses a Unicode character family and returns its representative node.
 	 */
-	CharProperty family(boolean singleLetter, boolean maybeComplement) {
+	private CharProperty family(boolean singleLetter, boolean maybeComplement) {
 		codepoints.next();
 		String name;
 		CharProperty node = null;
@@ -982,7 +982,7 @@ public class PatternCompiler implements java.io.Serializable {
 	 * Parses and returns the name of a "named capturing group", the trailing
 	 * ">" is consumed after parsing.
 	 */
-	String groupname(int ch) {
+	private String groupname(int ch) {
 		StringBuilder sb = new StringBuilder();
 		sb.append(Character.toChars(ch));
 		while (ASCII.isLower(ch = codepoints.read()) || ASCII.isUpper(ch)
@@ -1257,7 +1257,7 @@ public class PatternCompiler implements java.io.Serializable {
 	/**
 	 * Utility method for creating a string slice matcher.
 	 */
-	Node newSlice(int[] buf, int count, boolean hasSupplementary) {
+	private Node newSlice(int[] buf, int count, boolean hasSupplementary) {
 		int[] tmp = new int[count];
 		if (has(CASE_INSENSITIVE)) {
 			if (has(UNICODE_CASE)) {
@@ -1340,7 +1340,7 @@ public class PatternCompiler implements java.io.Serializable {
 			}
 		};
 	}
-	boolean has(int flag) {
+	private boolean has(int flag) {
 		return Pattern.has(flags, flag);
 	}
 	/**

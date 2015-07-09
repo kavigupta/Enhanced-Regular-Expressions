@@ -25,6 +25,11 @@ class Node extends Object {
 		return true;
 	}
 	/**
+	 * This method does nothing by default. Called whenever backtracking is
+	 * needed.
+	 */
+	public void clean(Matcher mat) {}
+	/**
 	 * This method is good for all zero length assertions.
 	 */
 	boolean study(TreeInfo info) {
@@ -432,37 +437,39 @@ class Node extends Object {
 		// Greedy match.
 		// i is the index to start matching at
 		// j is the number of atoms that have matched
-		boolean match0(Matcher matcher, int i, int j, CharSequence seq) {
-			if (j >= cmax) {
+		boolean match0(Matcher matcher, int i, int numberMatched,
+				CharSequence seq) {
+			if (numberMatched >= cmax) {
 				// We have matched the maximum... continue with the rest of
 				// the regular expression
 				return next.match(matcher, i, seq);
 			}
-			int backLimit = j;
+			int backLimit = numberMatched;
 			while (atom.match(matcher, i, seq)) {
 				// k is the length of this match
-				int k = matcher.last - i;
-				if (k == 0) // Zero length match
+				int matchLen = matcher.last - i;
+				if (matchLen == 0) // Zero length match
 					break;
 				// Move up index and number matched
 				i = matcher.last;
-				j++;
+				numberMatched++;
 				// We are greedy so match as many as we can
-				while (j < cmax) {
+				while (numberMatched < cmax) {
 					if (!atom.match(matcher, i, seq)) break;
-					if (i + k != matcher.last) {
-						if (match0(matcher, matcher.last, j + 1, seq))
-							return true;
+					if (i + matchLen != matcher.last) {
+						if (match0(matcher, matcher.last,
+								numberMatched + 1, seq)) return true;
 						break;
 					}
-					i += k;
-					j++;
+					i += matchLen;
+					numberMatched++;
 				}
 				// Handle backing off if match fails
-				while (j >= backLimit) {
+				while (numberMatched >= backLimit) {
 					if (next.match(matcher, i, seq)) return true;
-					i -= k;
-					j--;
+					i -= matchLen;
+					numberMatched--;
+					atom.clean(matcher);
 				}
 				return false;
 			}
@@ -621,18 +628,11 @@ class Node extends Object {
 					}
 				}
 				while (j > min) {
-					if (next.match(matcher, i, seq)) {
-						if (capture) {
-							matcher.cacheGroup(groupIndex / 2,
-									Range.of(i - k, i));
-						}
-						return true;
-					}
+					if (next.match(matcher, i, seq)) { return true; }
 					// backing off
 					i = i - k;
 					if (capture) {
-						matcher.cacheGroup(groupIndex / 2,
-								Range.of(i - k, i));
+						clean(matcher);
 					}
 					j--;
 				}
@@ -669,6 +669,14 @@ class Node extends Object {
 				i = matcher.last;
 			}
 			return next.match(matcher, i, seq);
+		}
+		@Override
+		public void clean(Matcher mat) {
+			mat.removeGroup(groupIndex / 2);
+			System.out.println("NEXT: " + next);
+			for (Node n = atom; n != null && n.next.next != null; n = n.next) {
+				n.clean(mat);
+			}
 		}
 		@Override
 		boolean study(TreeInfo info) {
@@ -847,9 +855,8 @@ class Node extends Object {
 				// Save the group so we can unset it if it
 				// backs off of a match.
 				matcher.cacheGroup(groupIndex / 2, Range.of(tmp, i));
-				if (next.match(matcher, i, seq)) { return true; }
-				matcher.groupsr[groupIndex / 2]
-						.remove(matcher.groupsr[groupIndex / 2].size() - 1);;
+				if (next.match(matcher, i, seq)) return true;
+				matcher.removeGroup(groupIndex / 2);
 				return false;
 			} else {
 				// This is a group reference case. We don't need to save any
@@ -857,6 +864,10 @@ class Node extends Object {
 				matcher.last = i;
 				return true;
 			}
+		}
+		@Override
+		public void clean(Matcher mat) {
+			mat.removeGroup(groupIndex / 2);
 		}
 	}
 	/**
