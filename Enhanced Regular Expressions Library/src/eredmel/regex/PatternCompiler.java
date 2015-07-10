@@ -7,8 +7,57 @@ import static eredmel.regex.Pattern.*;
 
 import java.util.Locale;
 
-import eredmel.regex.CharProperty.*;
-import eredmel.regex.Node.*;
+import eredmel.regex.CharProperty.All;
+import eredmel.regex.CharProperty.BitClass;
+import eredmel.regex.CharProperty.Block;
+import eredmel.regex.CharProperty.Category;
+import eredmel.regex.CharProperty.Ctype;
+import eredmel.regex.CharProperty.Dot;
+import eredmel.regex.CharProperty.HorizWS;
+import eredmel.regex.CharProperty.Script;
+import eredmel.regex.CharProperty.UnixDot;
+import eredmel.regex.CharProperty.Utype;
+import eredmel.regex.CharProperty.VertWS;
+import eredmel.regex.Node.BackRef;
+import eredmel.regex.Node.Begin;
+import eredmel.regex.Node.Behind;
+import eredmel.regex.Node.BehindS;
+import eredmel.regex.Node.BnM;
+import eredmel.regex.Node.Bound;
+import eredmel.regex.Node.Branch;
+import eredmel.regex.Node.BranchConn;
+import eredmel.regex.Node.CIBackRef;
+import eredmel.regex.Node.Caret;
+import eredmel.regex.Node.Curly;
+import eredmel.regex.Node.Dollar;
+import eredmel.regex.Node.End;
+import eredmel.regex.Node.EnregexCloseParen;
+import eredmel.regex.Node.EnregexOpenParen;
+import eredmel.regex.Node.EnregexQuote;
+import eredmel.regex.Node.First;
+import eredmel.regex.Node.GroupCurly;
+import eredmel.regex.Node.GroupHead;
+import eredmel.regex.Node.GroupTail;
+import eredmel.regex.Node.LastMatch;
+import eredmel.regex.Node.LazyLoop;
+import eredmel.regex.Node.LineEnding;
+import eredmel.regex.Node.Loop;
+import eredmel.regex.Node.Neg;
+import eredmel.regex.Node.NotBehind;
+import eredmel.regex.Node.NotBehindS;
+import eredmel.regex.Node.Pos;
+import eredmel.regex.Node.Prolog;
+import eredmel.regex.Node.Ques;
+import eredmel.regex.Node.Slice;
+import eredmel.regex.Node.SliceI;
+import eredmel.regex.Node.SliceIS;
+import eredmel.regex.Node.SliceS;
+import eredmel.regex.Node.SliceU;
+import eredmel.regex.Node.SliceUS;
+import eredmel.regex.Node.Start;
+import eredmel.regex.Node.StartS;
+import eredmel.regex.Node.UnixCaret;
+import eredmel.regex.Node.UnixDollar;
 import eredmel.regex.Pattern.TreeInfo;
 
 /**
@@ -41,20 +90,23 @@ public class PatternCompiler implements java.io.Serializable {
 	 */
 	private int flags;
 	private final GroupRegistry registry;
-	private PatternCompiler(String pattern, int f) {
+	private final char[][] quot;
+	private PatternCompiler(String pattern, int f, char[][] quot) {
 		this.flags = f;
 		this.localCount = 0;
 		// to use UNICODE_CASE if UNICODE_CHARACTER_CLASS present
 		if ((flags & UNICODE_CHARACTER_CLASS) != 0) flags |= UNICODE_CASE;
 		codepoints = new CodePointSequence(pattern, this::flags);
 		this.registry = new GroupRegistry();
+		this.quot = quot;
 	}
 	/**
 	 * Copies regular expression to an int array and invokes the parsing
 	 * of the expression which will create the object tree.
 	 */
-	public static CompiledPattern compile(String pattern, int flags) {
-		PatternCompiler pc = new PatternCompiler(pattern, flags);
+	public static CompiledPattern compile(String pattern, int flags,
+			char[][] quot) {
+		PatternCompiler pc = new PatternCompiler(pattern, flags, quot);
 		Node matchRoot = pc.parse();
 		return new CompiledPattern(pc.root, matchRoot, pc.registry,
 				pc.localCount);
@@ -235,6 +287,14 @@ public class PatternCompiler implements java.io.Serializable {
 					codepoints.next();
 					throw codepoints.error("Dangling meta character '"
 							+ ((char) ch) + "'");
+				case '~':
+					if (has(ENHANCED_REGEX)) {
+						codepoints.next();
+						node = enhancedRegex(false);
+						break;
+					}
+					node = atom();
+					break;
 				case 0:
 					if (codepoints.cursor >= codepoints.patternLength) {
 						break LOOP;
@@ -256,6 +316,34 @@ public class PatternCompiler implements java.io.Serializable {
 		tail.next = end;
 		root = tail; // double return
 		return head;
+	}
+	private Node enhancedRegex(boolean caretted) {
+		int ch = codepoints.next();
+		switch (EnregexSystem.classify(quot, ch)) {
+			case OPEN_PAREN:
+				if (caretted)
+					codepoints.error("Carets cannot preceed a parenthesis in an enregex assertion");
+				return new EnregexOpenParen(ch);
+			case CLOSE_PAREN:
+				if (caretted)
+					codepoints.error("Carets cannot preceed a parenthesis in an enregex assertion");
+				return new EnregexCloseParen(ch);
+			case CLOSE_QUOTE:
+				int matching = EnregexSystem.matching(quot, ch);
+				return new EnregexQuote(caretted ? ch != matching
+						: ch == matching, matching);
+			case OPEN_QUOTE:
+				return new EnregexQuote(caretted, ch);
+			case CARET:
+				if (caretted)
+					codepoints.error("Multiple carets have no meaning in an enregex assertion");
+				return enhancedRegex(true);
+			case ERROR:
+				codepoints.error(ch
+						+ " is not a valid character in an enregex assertion");
+		}
+		codepoints.error("Internal Error, theoretically unreachable point in the code reached");
+		return null;
 	}
 	@SuppressWarnings("fallthrough")
 	/**

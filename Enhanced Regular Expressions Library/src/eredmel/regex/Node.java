@@ -1047,7 +1047,6 @@ class Node extends Object {
 			} catch (IndexOutOfBoundsException e) {
 				j = k = -1;
 			}
-			// TODO
 			int groupSize = k - j;
 			// If the referenced group didn't match, neither can this
 			if (j < 0) return false;
@@ -1763,6 +1762,63 @@ class Node extends Object {
 			}
 			matcher.hitEnd = true;
 			return false;
+		}
+	}
+	/**
+	 * 
+	 * A node representing the opening of an enregex parenthesis match.
+	 * 
+	 * @author Kavi Gupta
+	 * 
+	 */
+	static final class EnregexOpenParen extends Node {
+		private final int paren;
+		public EnregexOpenParen(int paren) {
+			this.paren = paren;
+		}
+		@Override
+		boolean match(Matcher matcher, int i, CharSequence seq) {
+			matcher.system.addParen(paren, i);
+			return super.match(matcher, i, seq);
+		}
+	}
+	/**
+	 * 
+	 * A node representing the closing of an enregex parenthesis match.
+	 * 
+	 * @author Kavi Gupta
+	 * 
+	 */
+	static final class EnregexCloseParen extends Node {
+		private final int paren;
+		public EnregexCloseParen(int paren) {
+			this.paren = paren;
+		}
+		@Override
+		boolean match(Matcher matcher, int i, CharSequence seq) {
+			matcher.system.parenMatches(paren, i);
+			return super.match(matcher, i, seq);
+		}
+	}
+	/**
+	 * 
+	 * A node representing the assertion that the given location is in or is
+	 * not in a quote.
+	 * 
+	 * @author Kavi Gupta
+	 * 
+	 */
+	static final class EnregexQuote extends Node {
+		private final boolean positive;
+		private final int quote;
+		EnregexQuote(boolean positive, int quote) {
+			this.positive = positive;
+			this.quote = quote;
+		}
+		@Override
+		boolean match(Matcher matcher, int i, CharSequence seq) {
+			matcher.system.quoteMatches(quote, positive);
+			return super.match(matcher, i, seq);
 		}
 	}
 }

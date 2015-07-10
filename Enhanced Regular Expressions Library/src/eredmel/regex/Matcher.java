@@ -122,15 +122,6 @@ public final class Matcher implements MatchResult {
 	 * a group was skipped during the matching.
 	 */
 	ArrayList<Range>[] groupsr;
-	void cacheGroup(int i, Range of) {
-		// if (range(i) != null && of.start < range(i).end)
-		// throw new RuntimeException();
-		groupsr[i].add(of);
-	}
-	void removeGroup(int i) {
-		System.out.println("Cleaning: " + (i));
-		groupsr[i].remove(groupsr[i].size() - 1);
-	}
 	/**
 	 * The range within the sequence that is to be matched. Anchors
 	 * will match at these "hard" boundaries. Changing the region
@@ -146,6 +137,10 @@ public final class Matcher implements MatchResult {
 	 * The original string being matched.
 	 */
 	CharSequence text;
+	/**
+	 * The EnregexSystem to be used.
+	 */
+	EnregexSystem system;
 	/**
 	 * Matcher state used by the last node. NOANCHOR is used when a
 	 * match does not have to consume all of the input. ENDANCHOR is
@@ -217,10 +212,12 @@ public final class Matcher implements MatchResult {
 	 * All matchers have the state used by Pattern during a match.
 	 */
 	@SuppressWarnings("unchecked")
-	Matcher(Pattern parent, CharSequence text) {
+	Matcher(Pattern parent, CharSequence text, char[][] quot) {
 		this.parentPattern = parent;
 		this.text = text;
-		// Allocate state storage
+		this.system = new EnregexSystem(text, quot);// Allocate
+											// state
+		// storage
 		int parentGroupCount = Math.max(
 				parent.compiledPattern.registry.capturingGroupCount, 10);
 		groupsr = new ArrayList[parentGroupCount];
@@ -245,7 +242,8 @@ public final class Matcher implements MatchResult {
 	 * @since 1.5
 	 */
 	public MatchResult toMatchResult() {
-		Matcher result = new Matcher(this.parentPattern, text.toString());
+		Matcher result = new Matcher(this.parentPattern, text.toString(),
+				system.quot);
 		result.first = this.first;
 		result.last = this.last;
 		result.groupsr = this.groupsr.clone();
@@ -318,7 +316,26 @@ public final class Matcher implements MatchResult {
 	 * @return This matcher
 	 */
 	public Matcher reset(CharSequence input) {
+		// TODO handle default quotsystem
+		return reset(input, "");
+	}
+	/**
+	 * Resets this matcher with a new input sequence.
+	 * <p>
+	 * Resetting a matcher discards all of its explicit state information and
+	 * sets its append position to zero. The matcher's region is set to the
+	 * default region, which is its entire character sequence. The anchoring
+	 * and transparency of this matcher's region boundaries are unaffected.
+	 *
+	 * @param input
+	 *        The new input character sequence
+	 * @param quot
+	 *        The quote system to be used
+	 * @return This matcher
+	 */
+	public Matcher reset(CharSequence input, String quot) {
 		text = input;
+		system = new EnregexSystem(text, EnregexSystem.resolve(quot));
 		return reset();
 	}
 	/**
@@ -1303,5 +1320,14 @@ public final class Matcher implements MatchResult {
 		groupsr[0] = zero;
 		for (int i = 1; i < groupsr.length; i++)
 			groupsr[i] = new ArrayList<>(new TreeSet<>(groupsr[i]));
+	}
+	void cacheGroup(int i, Range of) {
+		// if (range(i) != null && of.start < range(i).end)
+		// throw new RuntimeException();
+		groupsr[i].add(of);
+	}
+	void removeGroup(int i) {
+		System.out.println("Cleaning: " + (i));
+		groupsr[i].remove(groupsr[i].size() - 1);
 	}
 }

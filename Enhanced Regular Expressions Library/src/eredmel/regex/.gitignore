@@ -268,3 +268,8 @@
 /PatternCompiler$4.class
 /PatternCompiler$5.class
 /PatternCompiler.class
+/Node$EnregexOpenParen.class
+/EnregexSystem.class
+/EnregexSystem$EnregexSymbol.class
+/Node$EnregexCloseParen.class
+/Node$EnregexQuote.class

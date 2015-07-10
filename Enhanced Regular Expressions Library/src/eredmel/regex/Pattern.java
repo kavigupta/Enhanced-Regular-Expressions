@@ -35,7 +35,13 @@ import eredmel.regex.CharProperty.Single;
 import eredmel.regex.CharProperty.SingleI;
 import eredmel.regex.CharProperty.SingleS;
 import eredmel.regex.CharProperty.SingleU;
-import eredmel.regex.Node.*;
+import eredmel.regex.Node.Curly;
+import eredmel.regex.Node.GroupCurly;
+import eredmel.regex.Node.GroupTail;
+import eredmel.regex.Node.LastNode;
+import eredmel.regex.Node.Loop;
+import eredmel.regex.Node.Prolog;
+import eredmel.regex.Node.Start;
 
 /**
  * A compiled representation of a regular expression.
@@ -1232,6 +1238,11 @@ public final class Pattern implements java.io.Serializable {
 	 * @since 1.7
 	 */
 	public static final int UNICODE_CHARACTER_CLASS = 0x100;
+	/**
+	 * Enables Enhanced Regular Expressions. This makes {@code ~} a reserved
+	 * character that must be escaped.
+	 */
+	public static final int ENHANCED_REGEX = 0x200;
 	/*
 	 * Pattern has only two serialized components: The pattern string
 	 * and the flags, which are all that is needed to recompile the pattern
@@ -1246,6 +1257,7 @@ public final class Pattern implements java.io.Serializable {
 	 * @serial
 	 */
 	private final String pattern;
+	private char[][] quot;
 	/**
 	 * Boolean indicating this Pattern is compiled; this is necessary in order
 	 * to lazily compile deserialized Patterns.
@@ -1267,7 +1279,7 @@ public final class Pattern implements java.io.Serializable {
 	 *         If the expression's syntax is invalid
 	 */
 	public static Pattern compile(String regex) {
-		return new Pattern(regex, 0);
+		return compile(regex, 0);
 	}
 	/**
 	 * Compiles the given regular expression into a pattern with the given
@@ -1290,7 +1302,11 @@ public final class Pattern implements java.io.Serializable {
 	 *         If the expression's syntax is invalid
 	 */
 	public static Pattern compile(String regex, int flags) {
-		return new Pattern(regex, flags);
+		// TODO default enregex system
+		return compile(regex, flags, "");
+	}
+	public static Pattern compile(String regex, int flags, String quot) {
+		return new Pattern(regex, flags, EnregexSystem.resolve(quot));
 	}
 	/**
 	 * Returns the regular expression from which this pattern was compiled.
@@ -1318,6 +1334,8 @@ public final class Pattern implements java.io.Serializable {
 	 *
 	 * @param input
 	 *        The character sequence to be matched
+	 * @param quot
+	 *        The quotation pairs to use
 	 * @return A new matcher for this pattern
 	 */
 	public Matcher matcher(CharSequence input) {
@@ -1325,12 +1343,12 @@ public final class Pattern implements java.io.Serializable {
 			synchronized (this) {
 				if (!compiled) {
 					compiledPattern = PatternCompiler.compile(pattern,
-							flags);
+							flags, quot);
 					compiled = true;
 				}
 			}
 		}
-		return new Matcher(this, input);
+		return new Matcher(this, input, quot);
 	}
 	/**
 	 * Returns this pattern's match flags.
@@ -1580,14 +1598,15 @@ public final class Pattern implements java.io.Serializable {
 	 * a Pattern. An empty pattern string results in an object tree with
 	 * only a Start node and a LastNode node.
 	 */
-	private Pattern(String p, int f) {
+	private Pattern(String p, int f, char[][] quot) {
 		pattern = p;
+		this.quot = quot;
 		// Reset group index count
 		if (pattern.length() > 0) {
-			compiledPattern = PatternCompiler.compile(pattern, f);
+			compiledPattern = PatternCompiler.compile(pattern, f, quot);
 			compiled = true;
 		} else {
-			compiledPattern = PatternCompiler.compile(p, f);
+			compiledPattern = PatternCompiler.compile(p, f, quot);
 		}
 		// System.out.println(pattern);
 		// printObjectTree(compiledPattern.matchRoot);
