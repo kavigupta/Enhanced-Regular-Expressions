@@ -15,9 +15,9 @@ public class EnregexTestUtil {
 			int[][] startends) {
 		int i = 0;
 		ArrayList<MatchResult> matches = Pattern.compile(enregex,
-				Pattern.ENHANCED_REGEX, TO_USE).process(text);
+				Pattern.ENHANCED_REGEX, TO_USE).matches(text);
 		System.out.println(matches);
-		for (EnregexMatch m : matches) {
+		for (MatchResult m : matches) {
 			assertArrayEquals(i + "th element", startends[i],
 					new int[] { m.start(), m.end() });
 			i++;

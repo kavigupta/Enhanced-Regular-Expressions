@@ -42,4 +42,14 @@ public class EnregexType implements java.io.Serializable {
 		}
 		return q;
 	}
+	int parenType(int parenClose) {
+		for (int i = 0; i < parens.size(); i++)
+			if (parens.get(i).close == parenClose) return i;
+		return -1;
+	}
+	int quoteType(int quoteOpen) {
+		for (int i = 0; i < quotes.size(); i++)
+			if (quotes.get(i).open == quoteOpen) return i;
+		return -1;
+	}
 }
