@@ -212,10 +212,10 @@ public final class Matcher implements MatchResult {
 	 * All matchers have the state used by Pattern during a match.
 	 */
 	@SuppressWarnings("unchecked")
-	Matcher(Pattern parent, CharSequence text, char[][] quot) {
+	Matcher(Pattern parent, CharSequence text, EnregexType type) {
 		this.parentPattern = parent;
 		this.text = text;
-		this.system = new EnregexSystem(text, quot);// Allocate
+		this.system = new EnregexSystem(text, type);// Allocate
 											// state
 		// storage
 		int parentGroupCount = Math.max(
@@ -243,7 +243,7 @@ public final class Matcher implements MatchResult {
 	 */
 	public MatchResult toMatchResult() {
 		Matcher result = new Matcher(this.parentPattern, text.toString(),
-				system.quot);
+				system.type);
 		result.first = this.first;
 		result.last = this.last;
 		result.groupsr = this.groupsr.clone();
@@ -316,8 +316,7 @@ public final class Matcher implements MatchResult {
 	 * @return This matcher
 	 */
 	public Matcher reset(CharSequence input) {
-		// TODO handle default quotsystem
-		return reset(input, "");
+		return reset(input, EnregexType.EREDMEL_STANDARD);
 	}
 	/**
 	 * Resets this matcher with a new input sequence.
@@ -333,9 +332,9 @@ public final class Matcher implements MatchResult {
 	 *        The quote system to be used
 	 * @return This matcher
 	 */
-	public Matcher reset(CharSequence input, String quot) {
+	public Matcher reset(CharSequence input, EnregexType type) {
 		text = input;
-		system = new EnregexSystem(text, EnregexSystem.resolve(quot));
+		system = new EnregexSystem(text, type);
 		return reset();
 	}
 	/**

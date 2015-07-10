@@ -273,3 +273,7 @@
 /EnregexSystem$EnregexSymbol.class
 /Node$EnregexCloseParen.class
 /Node$EnregexQuote.class
+/EnregexType.class
+/SymbolPair.class
+/EnregexType$EnregexSymbol.class
+/EnregexSegment.class

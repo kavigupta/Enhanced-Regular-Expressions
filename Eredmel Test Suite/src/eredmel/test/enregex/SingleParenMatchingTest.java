@@ -3,12 +3,12 @@ package eredmel.test.enregex;
 import org.junit.Before;
 import org.junit.Test;
 
-import eredmel.enregex.EnregexType;
+import eredmel.regex.EnregexType;
 
 public class SingleParenMatchingTest {
 	@Before
 	public void start() {
-		EnregexTestUtil.TO_USE = EnregexType.EREDMEL;
+		EnregexTestUtil.TO_USE = EnregexType.EREDMEL_STANDARD;
 	}
 	@Test
 	public void worksWithRegexNormallyTest() {

@@ -7,8 +7,8 @@ import java.util.Arrays;
 import org.junit.Before;
 import org.junit.Test;
 
-import eredmel.enregex.EnregexType;
-import eredmel.enregex.SymbolPair;
+import eredmel.regex.EnregexType;
+import eredmel.regex.SymbolPair;
 
 public class MultiParenMatchingTest {
 	@Before

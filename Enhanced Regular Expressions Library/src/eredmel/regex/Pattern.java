@@ -1257,7 +1257,7 @@ public final class Pattern implements java.io.Serializable {
 	 * @serial
 	 */
 	private final String pattern;
-	private char[][] quot;
+	private EnregexType type;
 	/**
 	 * Boolean indicating this Pattern is compiled; this is necessary in order
 	 * to lazily compile deserialized Patterns.
@@ -1303,10 +1303,10 @@ public final class Pattern implements java.io.Serializable {
 	 */
 	public static Pattern compile(String regex, int flags) {
 		// TODO default enregex system
-		return compile(regex, flags, "");
+		return compile(regex, flags, EnregexType.EREDMEL_STANDARD);
 	}
-	public static Pattern compile(String regex, int flags, String quot) {
-		return new Pattern(regex, flags, EnregexSystem.resolve(quot));
+	public static Pattern compile(String regex, int flags, EnregexType type) {
+		return new Pattern(regex, flags, type);
 	}
 	/**
 	 * Returns the regular expression from which this pattern was compiled.
@@ -1334,7 +1334,7 @@ public final class Pattern implements java.io.Serializable {
 	 *
 	 * @param input
 	 *        The character sequence to be matched
-	 * @param quot
+	 * @param type
 	 *        The quotation pairs to use
 	 * @return A new matcher for this pattern
 	 */
@@ -1343,12 +1343,12 @@ public final class Pattern implements java.io.Serializable {
 			synchronized (this) {
 				if (!compiled) {
 					compiledPattern = PatternCompiler.compile(pattern,
-							flags, quot);
+							flags, type);
 					compiled = true;
 				}
 			}
 		}
-		return new Matcher(this, input, quot);
+		return new Matcher(this, input, type);
 	}
 	/**
 	 * Returns this pattern's match flags.
@@ -1598,15 +1598,15 @@ public final class Pattern implements java.io.Serializable {
 	 * a Pattern. An empty pattern string results in an object tree with
 	 * only a Start node and a LastNode node.
 	 */
-	private Pattern(String p, int f, char[][] quot) {
+	private Pattern(String p, int f, EnregexType type) {
 		pattern = p;
-		this.quot = quot;
+		this.type = type;
 		// Reset group index count
 		if (pattern.length() > 0) {
-			compiledPattern = PatternCompiler.compile(pattern, f, quot);
+			compiledPattern = PatternCompiler.compile(pattern, f, type);
 			compiled = true;
 		} else {
-			compiledPattern = PatternCompiler.compile(p, f, quot);
+			compiledPattern = PatternCompiler.compile(p, f, type);
 		}
 		// System.out.println(pattern);
 		// printObjectTree(compiledPattern.matchRoot);
@@ -1902,5 +1902,12 @@ public final class Pattern implements java.io.Serializable {
 		return StreamSupport.stream(Spliterators.spliteratorUnknownSize(
 				new MatcherIterator(), Spliterator.ORDERED
 						| Spliterator.NONNULL), false);
+	}
+	public ArrayList<MatchResult> matches(CharSequence text) {
+		ArrayList<MatchResult> list = new ArrayList<>();
+		Matcher mat = matcher(text);
+		while (mat.find())
+			list.add(mat.toMatchResult());
+		return list;
 	}
 }

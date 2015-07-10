@@ -1817,7 +1817,7 @@ class Node extends Object {
 		}
 		@Override
 		boolean match(Matcher matcher, int i, CharSequence seq) {
-			matcher.system.quoteMatches(quote, positive);
+			matcher.system.quoteMatches(quote, positive, i);
 			return super.match(matcher, i, seq);
 		}
 	}

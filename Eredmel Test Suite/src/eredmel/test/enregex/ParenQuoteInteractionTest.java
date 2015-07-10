@@ -5,12 +5,12 @@ import static eredmel.test.enregex.EnregexTestUtil.assertMatch;
 import org.junit.Before;
 import org.junit.Test;
 
-import eredmel.enregex.EnregexType;
+import eredmel.regex.EnregexType;
 
 public class ParenQuoteInteractionTest {
 	@Before
 	public void init() {
-		EnregexTestUtil.TO_USE = EnregexType.EREDMEL;
+		EnregexTestUtil.TO_USE = EnregexType.EREDMEL_STANDARD;
 	}
 	@Test
 	public void nullifyInternal() {

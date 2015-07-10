@@ -1,11 +1,10 @@
-package eredmel.enregex;
+package eredmel.regex;
 
-public class SymbolPair {
+public class SymbolPair implements java.io.Serializable {
 	public final char open, close;
 	public final boolean openEscaped, closeEscaped;
 	public SymbolPair(char open, char close, boolean openEscaped,
 			boolean closeEscaped) {
-		super();
 		this.open = open;
 		this.close = close;
 		this.openEscaped = openEscaped;

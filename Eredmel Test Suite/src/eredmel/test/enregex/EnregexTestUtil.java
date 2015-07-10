@@ -5,17 +5,17 @@ import static org.junit.Assert.assertEquals;
 
 import java.util.ArrayList;
 
-import eredmel.enregex.EnregexMatch;
-import eredmel.enregex.EnregexPattern;
-import eredmel.enregex.EnregexType;
+import eredmel.regex.EnregexType;
+import eredmel.regex.MatchResult;
+import eredmel.regex.Pattern;
 
 public class EnregexTestUtil {
-	public static EnregexType TO_USE = EnregexType.EREDMEL;
+	public static EnregexType TO_USE = EnregexType.EREDMEL_STANDARD;
 	public static void assertMatch(String enregex, String text,
 			int[][] startends) {
 		int i = 0;
-		ArrayList<EnregexMatch> matches = EnregexPattern.compile(enregex,
-				TO_USE).process(text);
+		ArrayList<MatchResult> matches = Pattern.compile(enregex,
+				Pattern.ENHANCED_REGEX, TO_USE).process(text);
 		System.out.println(matches);
 		for (EnregexMatch m : matches) {
 			assertArrayEquals(i + "th element", startends[i],

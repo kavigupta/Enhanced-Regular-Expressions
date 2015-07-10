@@ -90,23 +90,23 @@ public class PatternCompiler implements java.io.Serializable {
 	 */
 	private int flags;
 	private final GroupRegistry registry;
-	private final char[][] quot;
-	private PatternCompiler(String pattern, int f, char[][] quot) {
+	private final EnregexType type;
+	private PatternCompiler(String pattern, int f, EnregexType type) {
 		this.flags = f;
 		this.localCount = 0;
 		// to use UNICODE_CASE if UNICODE_CHARACTER_CLASS present
 		if ((flags & UNICODE_CHARACTER_CLASS) != 0) flags |= UNICODE_CASE;
 		codepoints = new CodePointSequence(pattern, this::flags);
 		this.registry = new GroupRegistry();
-		this.quot = quot;
+		this.type = type;
 	}
 	/**
 	 * Copies regular expression to an int array and invokes the parsing
 	 * of the expression which will create the object tree.
 	 */
 	public static CompiledPattern compile(String pattern, int flags,
-			char[][] quot) {
-		PatternCompiler pc = new PatternCompiler(pattern, flags, quot);
+			EnregexType type) {
+		PatternCompiler pc = new PatternCompiler(pattern, flags, type);
 		Node matchRoot = pc.parse();
 		return new CompiledPattern(pc.root, matchRoot, pc.registry,
 				pc.localCount);
@@ -319,7 +319,7 @@ public class PatternCompiler implements java.io.Serializable {
 	}
 	private Node enhancedRegex(boolean caretted) {
 		int ch = codepoints.next();
-		switch (EnregexSystem.classify(quot, ch)) {
+		switch (type.classify(ch)) {
 			case OPEN_PAREN:
 				if (caretted)
 					codepoints.error("Carets cannot preceed a parenthesis in an enregex assertion");
@@ -329,7 +329,7 @@ public class PatternCompiler implements java.io.Serializable {
 					codepoints.error("Carets cannot preceed a parenthesis in an enregex assertion");
 				return new EnregexCloseParen(ch);
 			case CLOSE_QUOTE:
-				int matching = EnregexSystem.matching(quot, ch);
+				int matching = type.matching(ch);
 				return new EnregexQuote(caretted ? ch != matching
 						: ch == matching, matching);
 			case OPEN_QUOTE:
