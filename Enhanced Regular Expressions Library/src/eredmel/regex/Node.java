@@ -1,11 +1,14 @@
-package openjdk.regex;
+/*
+ * Refactored out of the original openjdk.regex.Pattern class.
+ */
+package eredmel.regex;
 
-import static openjdk.regex.Pattern.*;
+import static eredmel.regex.Pattern.*;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import openjdk.regex.Pattern.TreeInfo;
+import eredmel.regex.Pattern.TreeInfo;
 
 /**
  * Base class for all node classes. Subclasses should override the match()

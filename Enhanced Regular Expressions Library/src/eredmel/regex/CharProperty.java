@@ -1,8 +1,12 @@
-package openjdk.regex;
+/*
+ * Refactored out of original openjdk.regex.Pattern class. Otherwise should have
+ * been more or less unmodified
+ */
+package eredmel.regex;
 
-import static openjdk.regex.Pattern.CASE_INSENSITIVE;
-import static openjdk.regex.Pattern.UNICODE_CASE;
-import openjdk.regex.Pattern.TreeInfo;
+import static eredmel.regex.Pattern.CASE_INSENSITIVE;
+import static eredmel.regex.Pattern.UNICODE_CASE;
+import eredmel.regex.Pattern.TreeInfo;
 
 /**
  * Abstract node class to match one character satisfying some

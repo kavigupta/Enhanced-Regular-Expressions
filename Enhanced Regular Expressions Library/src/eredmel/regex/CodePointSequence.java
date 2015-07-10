@@ -1,24 +1,56 @@
-package openjdk.regex;
+/*
+ * Refactored out of the original openjdk.regex.Pattern class.
+ */
+package eredmel.regex;
 
-import static openjdk.regex.Pattern.*;
+import static eredmel.regex.Pattern.*;
 
 import java.text.Normalizer;
 import java.util.Arrays;
 import java.util.function.Supplier;
 
-public class CodePointSequence {
+/**
+ * A class for containing an array of codepoints along with a
+ * {@code patternLength}
+ * 
+ * This was primarily refactored out of {@code openjdk.regex.Pattern}
+ */
+class CodePointSequence {
+	/**
+	 * A buffer containing codepoints used to parse a given pattern.
+	 */
 	int[] temp;
 	/**
 	 * Holds the length of the pattern string.
 	 */
 	transient int patternLength;
+	/**
+	 * Since flags can change, a simple lambda expression must be passed to
+	 * {@code CodePointSequence} from {@code Pattern}.
+	 */
 	private final Supplier<Integer> flags;
+	/**
+	 * The current point in the pattern string of the parsing.
+	 */
 	int cursor;
-	public CodePointSequence(Supplier<Integer> flags, int cursor) {
+	/**
+	 * If the Start node might possibly match supplementary characters.
+	 * It is set to true during compiling if
+	 * (1) There is supplementary char in pattern, or
+	 * (2) There is complement node of Category or Block
+	 */
+	boolean hasSupplementary;
+	/**
+	 * Constructs a code point sequence a pattern string and flag provision.
+	 * 
+	 * @param pattern
+	 *        the pattern string to be used
+	 * @param flags
+	 *        the flag supplier to be used (this::flags)
+	 */
+	CodePointSequence(String pattern, Supplier<Integer> flags) {
 		this.flags = flags;
-		this.cursor = cursor;
-	}
-	public boolean compile(String pattern) {
+		this.cursor = 0;
 		String normalizedPattern;
 		// Handle canonical equivalences
 		if (has(flags.get(), CANON_EQ) && !has(flags.get(), LITERAL)) {
@@ -30,7 +62,6 @@ public class CodePointSequence {
 		// Copy pattern to int array for convenience
 		// Use double zero to terminate pattern
 		temp = new int[patternLength + 2];
-		boolean hasSupplementary = false;
 		int c, count = 0;
 		// Convert all chars into code points
 		for (int x = 0; x < patternLength; x += Character.charCount(c)) {
@@ -42,7 +73,18 @@ public class CodePointSequence {
 		}
 		patternLength = count; // patternLength now in code points
 		if (!has(flags.get(), LITERAL)) RemoveQEQuoting();
-		return hasSupplementary;
+	}
+	/**
+	 * 
+	 * Converts a slice of this CodePointSequence to a String
+	 * 
+	 * @param start
+	 *        the starting index
+	 * @param len
+	 *        the length of the subsequence
+	 */
+	String toString(int start, int len) {
+		return new String(temp, start, len);
 	}
 	/**
 	 * The pattern is converted to normalizedD form and then a pure group
@@ -519,10 +561,13 @@ public class CodePointSequence {
 	 * Internal method used for handling all syntax The pattern is
 	 * displayed with a pointer to aid in locating the syntax error.
 	 */
-	public PatternSyntaxException error(String s) {
+	PatternSyntaxException error(String s) {
 		return new PatternSyntaxException(s, new String(temp, 0,
 				patternLength), cursor - 1);
 	}
+	/**
+	 * Counts the code points in the given character sequence.
+	 */
 	static final int countCodePoints(CharSequence seq) {
 		int length = seq.length();
 		int n = 0;

@@ -1,4 +1,6 @@
 /*
+ * This class has mostly been refactored into several other classes.
+ * 
  * Copyright (c) 1999, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  * 
@@ -22,24 +24,18 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package openjdk.regex;
+package eredmel.regex;
 
 import java.util.*;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
-import openjdk.regex.CharProperty.Single;
-import openjdk.regex.CharProperty.SingleI;
-import openjdk.regex.CharProperty.SingleS;
-import openjdk.regex.CharProperty.SingleU;
-import openjdk.regex.Node.Curly;
-import openjdk.regex.Node.GroupCurly;
-import openjdk.regex.Node.GroupTail;
-import openjdk.regex.Node.LastNode;
-import openjdk.regex.Node.Loop;
-import openjdk.regex.Node.Prolog;
-import openjdk.regex.Node.Start;
+import eredmel.regex.CharProperty.Single;
+import eredmel.regex.CharProperty.SingleI;
+import eredmel.regex.CharProperty.SingleS;
+import eredmel.regex.CharProperty.SingleU;
+import eredmel.regex.Node.*;
 
 /**
  * A compiled representation of a regular expression.

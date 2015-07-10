@@ -1,4 +1,6 @@
 /*
+ * Refactored slightly from the openjdk original.
+ * 
  * Copyright (c) 1999, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  * 
@@ -22,7 +24,7 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package openjdk.regex;
+package eredmel.regex;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -247,6 +249,8 @@ public final class Matcher implements MatchResult {
 		result.first = this.first;
 		result.last = this.last;
 		result.groupsr = this.groupsr.clone();
+		for (int i = 0; i < groupsr.length; i++)
+			result.groupsr[i] = new ArrayList<>(result.groupsr[i]);
 		return result;
 	}
 	/**
@@ -325,19 +329,24 @@ public final class Matcher implements MatchResult {
 	 *         If no match has yet been attempted,
 	 *         or if the previous match operation failed
 	 */
+	@Override
 	public Range range(int group) {
 		return range(group, iterations(group) - 1);
 	}
+	@Override
 	public int iterations(int group) {
 		return groupsr[group].size();
 	}
+	@Override
 	public int iterations(String group) {
 		return iterations(getMatchedGroupIndex(group));
 	}
+	@Override
 	public Range range(int group, int iteration) {
 		if (iteration >= groupsr[group].size() || iteration < 0) return null;
 		return groupsr[group].get(iteration);
 	}
+	@Override
 	public Range range(String groupName, int iteration) {
 		return range(getMatchedGroupIndex(groupName), iteration);
 	}
@@ -393,6 +402,7 @@ public final class Matcher implements MatchResult {
 	 *         with the given name
 	 * @since 1.8
 	 */
+	@Override
 	public int start(String name) {
 		return start(getMatchedGroupIndex(name));
 	}
@@ -456,6 +466,7 @@ public final class Matcher implements MatchResult {
 	 *         with the given name
 	 * @since 1.8
 	 */
+	@Override
 	public int end(String name) {
 		return end(getMatchedGroupIndex(name));
 	}
@@ -551,6 +562,7 @@ public final class Matcher implements MatchResult {
 	 *         with the given name
 	 * @since 1.7
 	 */
+	@Override
 	public String group(String name) {
 		int group = getMatchedGroupIndex(name);
 		return group(group);
@@ -1291,8 +1303,5 @@ public final class Matcher implements MatchResult {
 		groupsr[0] = zero;
 		for (int i = 1; i < groupsr.length; i++)
 			groupsr[i] = new ArrayList<>(new TreeSet<>(groupsr[i]));
-	}
-	public MatchCache permanantResult() {
-		return new MatchCache(this);
 	}
 }

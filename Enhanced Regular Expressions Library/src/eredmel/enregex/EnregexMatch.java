@@ -1,14 +1,14 @@
 package eredmel.enregex;
 
-import openjdk.regex.MatchCache;
-import openjdk.regex.Matcher;
+import eredmel.regex.MatchResult;
+import eredmel.regex.Matcher;
 
 public class EnregexMatch {
-	private MatchCache mat;
+	private MatchResult mat;
 	private int offset;
 	public EnregexMatch(int offset, Matcher mat) {
 		this.offset = offset;
-		this.mat = mat.permanantResult();
+		this.mat = mat.toMatchResult();
 	}
 	public int start() {
 		return offset + mat.start();

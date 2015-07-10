@@ -5,10 +5,10 @@ import static org.junit.Assert.assertEquals;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import openjdk.regex.Matcher;
-import openjdk.regex.Pattern;
-
 import org.junit.Test;
+
+import eredmel.regex.Matcher;
+import eredmel.regex.Pattern;
 
 public class MultipleCapturesTest {
 	@Test

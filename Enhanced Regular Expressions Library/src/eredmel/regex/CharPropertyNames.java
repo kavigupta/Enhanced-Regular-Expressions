@@ -1,10 +1,13 @@
-package openjdk.regex;
+/*
+ * Unmodified from original openjdk.regex package.
+ */
+package eredmel.regex;
 
 import java.util.HashMap;
 
-import openjdk.regex.CharProperty.All;
-import openjdk.regex.CharProperty.Category;
-import openjdk.regex.CharProperty.Ctype;
+import eredmel.regex.CharProperty.All;
+import eredmel.regex.CharProperty.Category;
+import eredmel.regex.CharProperty.Ctype;
 
 /**
  * Utility class for dealing with character property names.

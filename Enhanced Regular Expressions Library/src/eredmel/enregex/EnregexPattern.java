@@ -4,9 +4,9 @@ import java.util.ArrayList;
 import java.util.Stack;
 import java.util.function.Function;
 
-import openjdk.regex.Matcher;
-import openjdk.regex.Pattern;
-import openjdk.regex.PatternSyntaxException;
+import eredmel.regex.Matcher;
+import eredmel.regex.Pattern;
+import eredmel.regex.PatternSyntaxException;
 
 /**
  * An Enhanced Regex Pattern is basically a regex pattern with two additional

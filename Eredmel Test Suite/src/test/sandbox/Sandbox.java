@@ -1,7 +1,7 @@
 package test.sandbox;
 
-import openjdk.regex.Matcher;
-import openjdk.regex.Pattern;
+import eredmel.regex.Matcher;
+import eredmel.regex.Pattern;
 
 public class Sandbox {
 	public static void main(String[] args) {

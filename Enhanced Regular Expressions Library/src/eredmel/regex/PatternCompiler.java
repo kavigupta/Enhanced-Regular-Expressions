@@ -1,59 +1,19 @@
-package openjdk.regex;
+/*
+ * Refactored out of the original openjdk.regex.Pattern class
+ */
+package eredmel.regex;
 
-import static openjdk.regex.Pattern.*;
+import static eredmel.regex.Pattern.*;
 
 import java.util.Locale;
 
-import openjdk.regex.CharProperty.All;
-import openjdk.regex.CharProperty.BitClass;
-import openjdk.regex.CharProperty.Block;
-import openjdk.regex.CharProperty.Category;
-import openjdk.regex.CharProperty.Ctype;
-import openjdk.regex.CharProperty.Dot;
-import openjdk.regex.CharProperty.HorizWS;
-import openjdk.regex.CharProperty.Script;
-import openjdk.regex.CharProperty.UnixDot;
-import openjdk.regex.CharProperty.Utype;
-import openjdk.regex.CharProperty.VertWS;
-import openjdk.regex.Node.BackRef;
-import openjdk.regex.Node.Begin;
-import openjdk.regex.Node.Behind;
-import openjdk.regex.Node.BehindS;
-import openjdk.regex.Node.BnM;
-import openjdk.regex.Node.Bound;
-import openjdk.regex.Node.Branch;
-import openjdk.regex.Node.BranchConn;
-import openjdk.regex.Node.CIBackRef;
-import openjdk.regex.Node.Caret;
-import openjdk.regex.Node.Curly;
-import openjdk.regex.Node.Dollar;
-import openjdk.regex.Node.End;
-import openjdk.regex.Node.First;
-import openjdk.regex.Node.GroupCurly;
-import openjdk.regex.Node.GroupHead;
-import openjdk.regex.Node.GroupTail;
-import openjdk.regex.Node.LastMatch;
-import openjdk.regex.Node.LazyLoop;
-import openjdk.regex.Node.LineEnding;
-import openjdk.regex.Node.Loop;
-import openjdk.regex.Node.Neg;
-import openjdk.regex.Node.NotBehind;
-import openjdk.regex.Node.NotBehindS;
-import openjdk.regex.Node.Pos;
-import openjdk.regex.Node.Prolog;
-import openjdk.regex.Node.Ques;
-import openjdk.regex.Node.Slice;
-import openjdk.regex.Node.SliceI;
-import openjdk.regex.Node.SliceIS;
-import openjdk.regex.Node.SliceS;
-import openjdk.regex.Node.SliceU;
-import openjdk.regex.Node.SliceUS;
-import openjdk.regex.Node.Start;
-import openjdk.regex.Node.StartS;
-import openjdk.regex.Node.UnixCaret;
-import openjdk.regex.Node.UnixDollar;
-import openjdk.regex.Pattern.TreeInfo;
+import eredmel.regex.CharProperty.*;
+import eredmel.regex.Node.*;
+import eredmel.regex.Pattern.TreeInfo;
 
+/**
+ * A parser class for regex patterns
+ */
 public class PatternCompiler implements java.io.Serializable {
 	/**
 	 * Temporary storage used by parsing pattern slice.
@@ -64,13 +24,6 @@ public class PatternCompiler implements java.io.Serializable {
 	 * parsed.
 	 */
 	private transient CodePointSequence codepoints;
-	/**
-	 * If the Start node might possibly match supplementary characters.
-	 * It is set to true during compiling if
-	 * (1) There is supplementary char in pattern, or
-	 * (2) There is complement node of Category or Block
-	 */
-	private transient boolean hasSupplementary;
 	/**
 	 * The local variable count used by parsing tree. Used by matchers to
 	 * allocate storage needed to perform a match.
@@ -88,12 +41,12 @@ public class PatternCompiler implements java.io.Serializable {
 	 */
 	private int flags;
 	private final GroupRegistry registry;
-	public PatternCompiler(int f) {
+	private PatternCompiler(String pattern, int f) {
 		this.flags = f;
 		this.localCount = 0;
 		// to use UNICODE_CASE if UNICODE_CHARACTER_CLASS present
 		if ((flags & UNICODE_CHARACTER_CLASS) != 0) flags |= UNICODE_CASE;
-		codepoints = new CodePointSequence(this::flags, 0);
+		codepoints = new CodePointSequence(pattern, this::flags);
 		this.registry = new GroupRegistry();
 	}
 	/**
@@ -101,13 +54,12 @@ public class PatternCompiler implements java.io.Serializable {
 	 * of the expression which will create the object tree.
 	 */
 	public static CompiledPattern compile(String pattern, int flags) {
-		PatternCompiler pc = new PatternCompiler(flags);
-		Node matchRoot = pc.parse(pattern);
+		PatternCompiler pc = new PatternCompiler(pattern, flags);
+		Node matchRoot = pc.parse();
 		return new CompiledPattern(pc.root, matchRoot, pc.registry,
 				pc.localCount);
 	}
-	private Node parse(String pattern) {
-		hasSupplementary = codepoints.compile(pattern);
+	private Node parse() {
 		// Allocate all temporary objects here.
 		buffer = new int[32];
 		registry.clear();
@@ -115,7 +67,7 @@ public class PatternCompiler implements java.io.Serializable {
 		if (has(LITERAL)) {
 			// Literal pattern handling
 			matchRoot = newSlice(codepoints.temp, codepoints.patternLength,
-					hasSupplementary);
+					codepoints.hasSupplementary);
 			matchRoot.next = lastAccept;
 		} else {
 			// Start recursive descent parsing
@@ -126,18 +78,15 @@ public class PatternCompiler implements java.io.Serializable {
 		if (matchRoot instanceof Slice) {
 			root = BnM.optimize(matchRoot);
 			if (root == matchRoot) {
-				root = hasSupplementary ? new StartS(matchRoot)
+				root = codepoints.hasSupplementary ? new StartS(matchRoot)
 						: new Start(matchRoot);
 			}
 		} else if (matchRoot instanceof Begin || matchRoot instanceof First) {
 			root = matchRoot;
 		} else {
-			root = hasSupplementary ? new StartS(matchRoot) : new Start(
-					matchRoot);
+			root = codepoints.hasSupplementary ? new StartS(matchRoot)
+					: new Start(matchRoot);
 		}
-		codepoints.temp = null;
-		buffer = null;
-		codepoints.patternLength = 0;
 		return matchRoot;
 	}
 	public int flags() {
@@ -880,11 +829,11 @@ public class PatternCompiler implements java.io.Serializable {
 		String name;
 		CharProperty node = null;
 		if (singleLetter) {
-			int c = codepoints.temp[codepoints.cursor];
+			int c = codepoints.peek();
 			if (!Character.isSupplementaryCodePoint(c)) {
 				name = String.valueOf((char) c);
 			} else {
-				name = new String(codepoints.temp, codepoints.cursor, 1);
+				name = codepoints.toString(codepoints.cursor, 1);
 			}
 			codepoints.read();
 		} else {
@@ -897,7 +846,7 @@ public class PatternCompiler implements java.io.Serializable {
 				throw codepoints.error("Unclosed character family");
 			if (i + 1 >= j)
 				throw codepoints.error("Empty character family");
-			name = new String(codepoints.temp, i, j - i - 1);
+			name = codepoints.toString(i, j - i - 1);
 		}
 		int i = name.indexOf('=');
 		if (i != -1) {
@@ -936,7 +885,7 @@ public class PatternCompiler implements java.io.Serializable {
 		}
 		if (maybeComplement) {
 			if (node instanceof Category || node instanceof Block)
-				hasSupplementary = true;
+				codepoints.hasSupplementary = true;
 			node = node.complement();
 		}
 		return node;

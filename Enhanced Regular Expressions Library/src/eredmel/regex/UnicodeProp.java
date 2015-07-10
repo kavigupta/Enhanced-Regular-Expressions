@@ -1,4 +1,6 @@
 /*
+ * Unmodified from original
+ * 
  * Copyright (c) 2011, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  * 
@@ -22,7 +24,7 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package openjdk.regex;
+package eredmel.regex;
 
 import java.util.HashMap;
 import java.util.Locale;

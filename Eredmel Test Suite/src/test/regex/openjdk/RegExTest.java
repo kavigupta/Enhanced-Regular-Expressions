@@ -45,13 +45,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
-import openjdk.regex.MatchResult;
-import openjdk.regex.Matcher;
-import openjdk.regex.Pattern;
-import openjdk.regex.PatternSyntaxException;
-
 import org.junit.Ignore;
 import org.junit.Test;
+
+import eredmel.regex.MatchResult;
+import eredmel.regex.Matcher;
+import eredmel.regex.Pattern;
+import eredmel.regex.PatternSyntaxException;
 
 /**
  * This is a test class created to check the operation of

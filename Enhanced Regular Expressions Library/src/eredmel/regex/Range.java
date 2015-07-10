@@ -1,8 +1,20 @@
-package openjdk.regex;
+/*
+ * Added
+ */
+package eredmel.regex;
 
+/**
+ * A class representing a range of indices {@code [start, end)}
+ */
 public class Range implements Comparable<Range> {
-	// TODO Rename
-	public final int start, end;
+	/**
+	 * The starting index, inclusive
+	 */
+	public final int start;
+	/**
+	 * The ending index, exclusive.
+	 */
+	public final int end;
 	private Range(int start, int end) {
 		super();
 		this.start = start;
@@ -34,9 +46,15 @@ public class Range implements Comparable<Range> {
 	public Object clone() throws CloneNotSupportedException {
 		return this;
 	}
+	/**
+	 * Checks if this range is the empty range.
+	 */
 	public boolean isEmpty() {
 		return start < 0 || end < 0;
 	}
+	/**
+	 * Constructs a range.
+	 */
 	public static Range of(int first, int last) {
 		return new Range(first, last);
 	}

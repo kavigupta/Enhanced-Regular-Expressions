@@ -3,7 +3,7 @@ package eredmel.enregex;
 import java.util.Arrays;
 import java.util.List;
 
-import openjdk.regex.Pattern;
+import eredmel.regex.Pattern;
 
 public class EnregexType {
 	public static final EnregexType EREDMEL = new EnregexType(
