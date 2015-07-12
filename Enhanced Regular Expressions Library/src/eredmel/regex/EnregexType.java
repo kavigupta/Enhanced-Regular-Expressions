@@ -2,6 +2,8 @@ package eredmel.regex;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class EnregexType implements java.io.Serializable {
 	public static final EnregexType EREDMEL_STANDARD = new EnregexType(
@@ -22,6 +24,7 @@ public class EnregexType implements java.io.Serializable {
 	EnregexSymbol classify(int c) {
 		if (c == '^') return EnregexSymbol.CARET;
 		for (SymbolPair ch : parens) {
+			Logger.getGlobal().log(Level.FINE, ch + "\t" + (char) c);
 			if (ch.open == c) return EnregexSymbol.OPEN_PAREN;
 			if (ch.close == c) return EnregexSymbol.CLOSE_PAREN;
 		}

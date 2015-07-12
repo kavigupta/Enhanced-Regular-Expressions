@@ -7,6 +7,9 @@ import static eredmel.regex.Pattern.*;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Stack;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import eredmel.regex.Pattern.TreeInfo;
 
@@ -424,6 +427,7 @@ class Node extends Object {
 		}
 		@Override
 		boolean match(Matcher matcher, int i, CharSequence seq) {
+			Logger.getGlobal().log(Level.FINE, "Curly node");
 			int j;
 			for (j = 0; j < cmin; j++) {
 				if (atom.match(matcher, i, seq)) {
@@ -432,6 +436,8 @@ class Node extends Object {
 				}
 				return false;
 			}
+			Logger.getGlobal()
+					.log(Level.FINE, "Match successful to minimum");
 			if (type == GREEDY)
 				return match0(matcher, i, j, seq);
 			else if (type == LAZY)
@@ -680,16 +686,17 @@ class Node extends Object {
 		}
 		@Override
 		public void clean(Matcher mat) {
-			System.out.println(Arrays.toString(mat.groupsr));
+			Logger.getGlobal().log(Level.FINE, Arrays.toString(mat.groupsr));
 			mat.removeGroup(groupIndex / 2);
-			System.out.println("THIS: " + this);
-			System.out.println("NEXT: " + next);
+			Logger.getGlobal().log(Level.FINE, "THIS: " + this);
+			Logger.getGlobal().log(Level.FINE, "NEXT: " + next);
 			for (Node n = atom; n != null && n.next.next != null; n = n.next) {
-				System.out.println("Cleaning " + n);
-				System.out.println(Arrays.toString(mat.groupsr));
+				Logger.getGlobal().log(Level.FINE, "Cleaning " + n);
+				Logger.getGlobal().log(Level.FINE,
+						Arrays.toString(mat.groupsr));
 				n.clean(mat);
 			}
-			System.out.println(Arrays.toString(mat.groupsr));
+			Logger.getGlobal().log(Level.FINE, Arrays.toString(mat.groupsr));
 		}
 		@Override
 		boolean study(TreeInfo info) {
@@ -1407,6 +1414,11 @@ class Node extends Object {
 			}
 			return next.match(matcher, i + len, seq);
 		}
+		@Override
+		public String toString() {
+			return "{Node.Slice " + new String(buffer, 0, buffer.length)
+					+ "}";
+		}
 	}
 	/**
 	 * Node class for a case_insensitive/BMP-only sequence of literal
@@ -1779,7 +1791,14 @@ class Node extends Object {
 		@Override
 		boolean match(Matcher matcher, int i, CharSequence seq) {
 			matcher.system.addParen(paren, i);
-			return super.match(matcher, i, seq);
+			Logger.getGlobal().log(Level.FINE,
+					"Open called at " + i + "; resulting system:::");
+			Logger.getGlobal().log(Level.FINE, "\t" + matcher.system);
+			return next.match(matcher, i, seq);
+		}
+		@Override
+		public void clean(Matcher mat) {
+			mat.system.popParen(mat.system.type.matching(paren));
 		}
 	}
 	/**
@@ -1791,13 +1810,29 @@ class Node extends Object {
 	 */
 	static final class EnregexCloseParen extends Node {
 		private final int paren;
+		private final Stack<Integer> locallyUsed;
 		public EnregexCloseParen(int paren) {
 			this.paren = paren;
+			this.locallyUsed = new Stack<>();
 		}
 		@Override
 		boolean match(Matcher matcher, int i, CharSequence seq) {
-			matcher.system.parenMatches(paren, i);
-			return super.match(matcher, i, seq);
+			if (!matcher.system.parenMatches(paren, i)) {
+				Logger.getGlobal().log(Level.FINE, "FALSE");
+				return false;
+			}
+			Logger.getGlobal().log(Level.FINE,
+					"Open called at " + i + "; resulting system:::");
+			Logger.getGlobal().log(Level.FINE, "TRUE");
+			locallyUsed.push(matcher.system.popParen(paren));
+			if (next.match(matcher, i, seq)) return true;
+			clean(matcher);
+			return false;
+		}
+		@Override
+		public void clean(Matcher mat) {
+			mat.system.addParen(mat.system.type.matching(paren),
+					locallyUsed.pop());
 		}
 	}
 	/**
@@ -1817,8 +1852,15 @@ class Node extends Object {
 		}
 		@Override
 		boolean match(Matcher matcher, int i, CharSequence seq) {
-			matcher.system.quoteMatches(quote, positive, i);
-			return super.match(matcher, i, seq);
+			if (!matcher.system.quoteMatches(quote, positive, i))
+				return false;
+			boolean nextMatch = next.match(matcher, i, seq);
+			return nextMatch;
+		}
+		@Override
+		public String toString() {
+			return "EnregexQuote [positive=" + positive + ", quote="
+					+ (char) quote + "]";
 		}
 	}
 }

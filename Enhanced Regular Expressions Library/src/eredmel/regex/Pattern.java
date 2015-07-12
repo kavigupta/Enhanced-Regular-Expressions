@@ -28,6 +28,8 @@ package eredmel.regex;
 
 import java.util.*;
 import java.util.function.Predicate;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -1608,42 +1610,44 @@ public final class Pattern implements java.io.Serializable {
 		} else {
 			compiledPattern = PatternCompiler.compile(p, f, type);
 		}
-		// System.out.println(pattern);
-		// printObjectTree(compiledPattern.matchRoot);
+		printObjectTree(Level.INFO, compiledPattern.matchRoot);
 	}
 	/**
 	 * Used to print out a subtree of the Pattern to help with debugging.
 	 */
-	@SuppressWarnings("unused")
-	private static void printObjectTree(Node node) {
+	private static void printObjectTree(Level level, Node node) {
 		while (node != null) {
 			if (node instanceof Prolog) {
-				System.out.println(node);
-				printObjectTree(((Prolog) node).loop);
-				System.out.println("**** end contents prolog loop");
+				Logger.getGlobal().log(level, node.toString());
+				printObjectTree(level, ((Prolog) node).loop);
+				Logger.getGlobal().log(level,
+						"**** end contents prolog loop");
 			} else if (node instanceof Loop) {
-				System.out.println(node);
-				printObjectTree(((Loop) node).body);
-				System.out.println("**** end contents Loop body");
+				Logger.getGlobal().log(level, node.toString());
+				printObjectTree(level, ((Loop) node).body);
+				Logger.getGlobal()
+						.log(level, "**** end contents Loop body");
 			} else if (node instanceof Curly) {
-				System.out.println(node);
-				printObjectTree(((Curly) node).atom);
-				System.out.println("**** end contents Curly body");
+				Logger.getGlobal().log(level, node.toString());
+				printObjectTree(level, ((Curly) node).atom);
+				Logger.getGlobal().log(level,
+						"**** end contents Curly body");
 			} else if (node instanceof GroupCurly) {
-				System.out.println(node);
-				printObjectTree(((GroupCurly) node).atom);
-				System.out.println("**** end contents GroupCurly body");
+				Logger.getGlobal().log(level, node.toString());
+				printObjectTree(level, ((GroupCurly) node).atom);
+				Logger.getGlobal().log(level,
+						"**** end contents GroupCurly body");
 			} else if (node instanceof GroupTail) {
-				System.out.println(node);
-				System.out.println("Tail next is " + node.next);
+				Logger.getGlobal().log(level, node.toString());
+				Logger.getGlobal().log(level, "Tail next is " + node.next);
 				return;
 			} else {
-				System.out.println(node);
+				Logger.getGlobal().log(level, node.toString());
 			}
 			node = node.next;
-			if (node != null) System.out.println("->next:");
+			if (node != null) Logger.getGlobal().log(level, "->next:");
 			if (node == Pattern.accept) {
-				System.out.println("Accept Node");
+				Logger.getGlobal().log(level, "Accept Node");
 				node = null;
 			}
 		}

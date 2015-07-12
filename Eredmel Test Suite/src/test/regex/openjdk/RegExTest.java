@@ -44,7 +44,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
+import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -60,6 +63,10 @@ import eredmel.regex.PatternSyntaxException;
 public class RegExTest {
 	private static Random generator = new Random();
 	private static int failCount = 0;
+	@Before
+	public void init() {
+		Logger.getGlobal().setLevel(Level.OFF);
+	}
 	/**
 	 * Main to interpret arguments and run several tests.
 	 */

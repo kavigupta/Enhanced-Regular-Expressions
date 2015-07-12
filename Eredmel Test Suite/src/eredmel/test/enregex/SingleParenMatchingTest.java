@@ -22,24 +22,26 @@ public class SingleParenMatchingTest {
 	}
 	@Test
 	public void singleNestTest() {
-		EnregexTestUtil.assertMatch("\\(~<.+~>\\)", "(a b c) (d e f)",
+		EnregexTestUtil.assertMatch("\\(~(.+~)\\)", "(a b c) (d e f)",
 				new int[][] { { 0, 7 }, { 8, 15 } });
-		EnregexTestUtil.assertMatch("\\(~<.+~>\\)", "(a b c') ('d e f)",
+		EnregexTestUtil.assertMatch("\\(~(.+~)\\)", "(a b c') ('d e f)",
 				new int[][] { { 0, 17 } });
 	}
 	@Test
 	public void multiNestTest() {
-		EnregexTestUtil.assertMatch("\\(~<.+~>\\)", "(a b c() ()d e f)",
+		EnregexTestUtil.assertMatch("\\(~(.+~)\\)", "(a b c() ()d e f)",
 				new int[][] { { 0, 17 } });
-		EnregexTestUtil.assertMatch("\\(~<.+~>\\)", "(()(())) (()(()))",
+		EnregexTestUtil.assertMatch("\\(~(.+~)\\)", "(()(())) (()(()))",
 				new int[][] { { 0, 8 }, { 9, 17 } });
-		EnregexTestUtil.assertMatch("\\(~<.+~>\\)", "()()", new int[][] {});
+		EnregexTestUtil.assertMatch("\\(~(.+~)\\)", "()()", new int[][] {});
 	}
 	@Test
 	public void argTest() {
-		EnregexTestUtil.assertMatch("\\(~<.*~>,~<.*~>\\)", "((),()) (,)",
+		EnregexTestUtil.assertMatch("\\(~(.*~),~(.*~)\\)", "(,)",
+				new int[][] { { 0, 3 } });
+		EnregexTestUtil.assertMatch("\\(~(.*~),~(.*~)\\)", "((),()) (,)",
 				new int[][] { { 0, 7 }, { 8, 11 } });
-		EnregexTestUtil.assertMatch("\\(~<.*~>,~<.*~>\\)", "((),()) (,)",
+		EnregexTestUtil.assertMatch("\\(~(.*~),~(.*~)\\)", "((),()) (,)",
 				new int[][] { { 0, 7 }, { 8, 11 } });
 	}
 }

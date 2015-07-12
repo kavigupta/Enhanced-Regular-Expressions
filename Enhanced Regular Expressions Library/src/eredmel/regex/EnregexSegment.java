@@ -1,5 +1,7 @@
 package eredmel.regex;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 // TODO allow for smarter lazy evaluation
 public class EnregexSegment implements CharSequence {
@@ -32,6 +34,7 @@ public class EnregexSegment implements CharSequence {
 	public boolean parensMatch(int i, int j, int closeParen) {
 		if (!metadataAt(i).equalParenState(metadataAt(j), closeParen))
 			return false;
+		Logger.getGlobal().log(Level.FINE, "Equal Paren State");
 		for (int k = i + 1; k < j; k++) {
 			if (!metadataAt(k).greaterOrEqualParenState(metadataAt(i),
 					closeParen)) return false;

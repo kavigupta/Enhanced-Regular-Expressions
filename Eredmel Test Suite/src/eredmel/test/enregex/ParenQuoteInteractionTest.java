@@ -14,12 +14,14 @@ public class ParenQuoteInteractionTest {
 	}
 	@Test
 	public void nullifyInternal() {
-		assertMatch("\\(~<.*~~,.*~>\\)", "('abc', 'def')", new int[][] { { 0,
-				14 } });
-		assertMatch("\\(~<.*~~,.*~>\\)",
+		assertMatch("\\(~(.*~^',.*~)\\)", "('abc', 'def')", new int[][] { {
+				0, 14 } });
+		assertMatch("\\(~(.*~^',.*~)\\)",
+				"('commas in strings, should not count')", new int[][] {});
+		assertMatch("\\(~(.*~^',.*~)\\)",
 				"('commas in \\'strings, should not count')",
 				new int[][] {});
-		assertMatch("\\(~<.+~>\\)", "('closeparen!!!)[to be ignored]')",
+		assertMatch("\\(~(.+~)\\)", "('closeparen!!!)[to be ignored]')",
 				new int[][] { { 0, 33 } });
 	}
 }

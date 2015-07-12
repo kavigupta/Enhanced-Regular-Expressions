@@ -6,6 +6,8 @@ package eredmel.regex;
 import static eredmel.regex.Pattern.*;
 
 import java.util.Locale;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import eredmel.regex.CharProperty.All;
 import eredmel.regex.CharProperty.BitClass;
@@ -289,8 +291,10 @@ public class PatternCompiler implements java.io.Serializable {
 							+ ((char) ch) + "'");
 				case '~':
 					if (has(ENHANCED_REGEX)) {
-						codepoints.next();
 						node = enhancedRegex(false);
+						codepoints.next();
+						Logger.getGlobal().log(Level.INFO,
+								node.toString());
 						break;
 					}
 					node = atom();
@@ -305,6 +309,8 @@ public class PatternCompiler implements java.io.Serializable {
 					break;
 			}
 			node = closure(node);
+			Logger.getGlobal().log(Level.FINE,
+					node + "\t" + head + "\t" + tail);
 			if (head == null) {
 				head = tail = node;
 			} else {
@@ -313,37 +319,45 @@ public class PatternCompiler implements java.io.Serializable {
 			}
 		}
 		if (head == null) { return end; }
+		Logger.getGlobal().log(Level.FINE, "Tree");
 		tail.next = end;
 		root = tail; // double return
 		return head;
 	}
 	private Node enhancedRegex(boolean caretted) {
+		Logger.getGlobal().log(Level.FINE, "eRE");
 		int ch = codepoints.next();
 		switch (type.classify(ch)) {
 			case OPEN_PAREN:
 				if (caretted)
-					codepoints.error("Carets cannot preceed a parenthesis in an enregex assertion");
+					throw codepoints
+							.error("Carets cannot preceed a parenthesis in an enregex assertion");
 				return new EnregexOpenParen(ch);
 			case CLOSE_PAREN:
 				if (caretted)
-					codepoints.error("Carets cannot preceed a parenthesis in an enregex assertion");
+					throw codepoints
+							.error("Carets cannot preceed a parenthesis in an enregex assertion");
 				return new EnregexCloseParen(ch);
 			case CLOSE_QUOTE:
 				int matching = type.matching(ch);
 				return new EnregexQuote(caretted ? ch != matching
 						: ch == matching, matching);
 			case OPEN_QUOTE:
-				return new EnregexQuote(caretted, ch);
+				return new EnregexQuote(!caretted, ch);
 			case CARET:
 				if (caretted)
-					codepoints.error("Multiple carets have no meaning in an enregex assertion");
-				return enhancedRegex(true);
+					throw codepoints
+							.error("Multiple carets have no meaning in an enregex assertion");
+				Node n = enhancedRegex(true);
+				return n;
 			case ERROR:
-				codepoints.error(ch
-						+ " is not a valid character in an enregex assertion");
+				throw codepoints
+						.error("\""
+								+ (char) ch
+								+ "\" is not a valid character in an enregex assertion");
 		}
-		codepoints.error("Internal Error, theoretically unreachable point in the code reached");
-		return null;
+		throw new RuntimeException(
+				"Internal Error, theoretically unreachable point in the code reached");
 	}
 	@SuppressWarnings("fallthrough")
 	/**
@@ -369,6 +383,7 @@ public class PatternCompiler implements java.io.Serializable {
 				case '$':
 				case '.':
 				case '^':
+				case '~':
 				case '(':
 				case '[':
 				case '|':

@@ -5,7 +5,6 @@ import static eredmel.test.enregex.EnregexTestUtil.assertMatch;
 import java.util.Arrays;
 
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import eredmel.regex.EnregexType;
@@ -22,10 +21,8 @@ public class QuoteMatchingTest {
 						new SymbolPair('/', '/', true, false)));
 	}
 	@Test
-	@Ignore
-	// TODO unignore
 	public void quoteMatchingTest() {
-		assertMatch("'(.~')*'", "'a' 'b'", new int[][] { { 0, 3 }, { 5, 8 } });
+		assertMatch("'(.~')*'", "'a' 'b'", new int[][] { { 0, 3 }, { 4, 7 } });
 	}
 	@Test
 	public void basicInNotQuoteTest() {
@@ -38,7 +35,7 @@ public class QuoteMatchingTest {
 				14, 16 } });
 		assertMatch("~^'\\)\\(", "(abc')('def)(ghi')('jkl)(mno)(pqr')'",
 				new int[][] { { 11, 13 }, { 23, 25 }, { 28, 30 } });
-		assertMatch("~'bcd.+~^'->.+efg~'", "'abcd'->'efgh'", new int[][] { {
+		assertMatch("~'bcd.+->~^'.+efg~'", "'abcd'->'efgh'", new int[][] { {
 				2, 12 } });
 		assertMatch("~]=", "x'[=]'", new int[][] { { 3, 4 } });
 		assertMatch("~^'=", "x'[=]'", new int[][] {});
