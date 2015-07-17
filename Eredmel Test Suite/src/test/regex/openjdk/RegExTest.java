@@ -1,6 +1,8 @@
 package test.regex.openjdk;
 
 /*
+ * Modified slightly from original. Modifications (c) Kavi Gupta.
+ * 
  * Copyright (c) 1999, 2011, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  * 
@@ -65,7 +67,7 @@ public class RegExTest {
 	private static int failCount = 0;
 	@Before
 	public void init() {
-		Logger.getGlobal().setLevel(Level.OFF);
+		Logger.getGlobal().setLevel(Level.INFO);
 	}
 	/**
 	 * Main to interpret arguments and run several tests.

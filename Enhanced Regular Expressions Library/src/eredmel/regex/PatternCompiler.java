@@ -63,7 +63,7 @@ import eredmel.regex.Node.UnixDollar;
 import eredmel.regex.Pattern.TreeInfo;
 
 /**
- * A parser class for regex patterns
+ * A parser class for regex patterns.
  */
 public class PatternCompiler implements java.io.Serializable {
 	/**
@@ -293,7 +293,7 @@ public class PatternCompiler implements java.io.Serializable {
 					if (has(ENHANCED_REGEX)) {
 						node = enhancedRegex(false);
 						codepoints.next();
-						Logger.getGlobal().log(Level.INFO,
+						Logger.getGlobal().log(Level.FINE,
 								node.toString());
 						break;
 					}
