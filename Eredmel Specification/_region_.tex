@@ -1,0 +1,43 @@
+\message{ !name(Eredmel_Specification_1_0.tex)}\documentclass{book}
+\usepackage[margins=1in]{geometry}
+\usepackage{xcolor}
+\usepackage{textcomp}
+
+\newcommand\code\texttt
+\newcommand{\codebox}[1]{\colorbox{black}{\textcolor{white}{\code{#1}}}}
+\newcommand{\bak}{\textbackslash}
+\newcommand{\til}{$\sim$}
+
+\begin{document}
+
+\message{ !name(Eredmel_Specification_1_0.tex) !offset(30) }
+\section{Quote Matching}
+The syntax of a quote match consists the formats \codebox{\til'} and \codebox{\til\^{}'}, where \codeblock{'} is replaced by an open-- or close--quote symbol. The interpretation is as follows:
+
+\begin{itemize}
+\item If the quote symbol is an open quote, then it represents a positive match.
+\item If the quote symbol is a close quote that is not also an open quote, then it represents a negative match.
+\item A \codebox{\^{}} reverses the sign of the match.
+\end{itemize}
+
+Whether something is ``in a quote'' is defined by the following algorithm.
+
+\begin{itemize}
+\item The beginning of the string is not in a quote.
+\item A start quote character begins a quote unless it is escaped and the Enregex Type declares that it can be escaped
+\item A close quote character \emph{of the current quote type} ends a quote unless it is escaped and the Enregex Type declares that it can be escaped
+\end{itemize}
+
+A few examples are below, in which valid quote pairs are \codebox{''} and \codebox{!?}\footnote{This is a deliberately contrived example. These do not count as valid quotes in the Eredmel Default standard, which only recognizes \codebox{''}.}
+
+\begin{itemize}
+\item \codebox{a\til'} matches \codebox{'a'}
+\item \codebox{a\til\^{}'} does not match \codebox{'a'}
+\item \codebox{a\til\^{}'} matches \codebox{!a?}
+\item \codebox{a\til\^{}?} matches \codebox{!a?}
+\end{itemize}
+
+
+\message{ !name(Eredmel_Specification_1_0.tex) !offset(28) }
+
+\end{document}

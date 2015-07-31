@@ -47,7 +47,7 @@ final class ASCII {
 	static final int GRAPH = (PUNCT | UPPER | LOWER | DIGIT);
 	static final int WORD = (UPPER | LOWER | UNDER | DIGIT);
 	static final int XDIGIT = (HEX);
-	private static final int[] ctype = new int[] { CNTRL, /* 00 (NUL) */
+	private static final int[] CTYPE = new int[] { CNTRL, /* 00 (NUL) */
 	CNTRL, /* 01 (SOH) */
 	CNTRL, /* 02 (STX) */
 	CNTRL, /* 03 (ETX) */
@@ -177,7 +177,7 @@ final class ASCII {
 	CNTRL, /* 7F (DEL) */
 	};
 	static int getType(int ch) {
-		return ((ch & 0xFFFFFF80) == 0 ? ctype[ch] : 0);
+		return ((ch & 0xFFFFFF80) == 0 ? CTYPE[ch] : 0);
 	}
 	static boolean isType(int ch, int type) {
 		return (getType(ch) & type) != 0;
@@ -225,7 +225,7 @@ final class ASCII {
 		return isType(ch, WORD);
 	}
 	static int toDigit(int ch) {
-		return (ctype[ch & 0x7F] & 0x3F);
+		return (CTYPE[ch & 0x7F] & 0x3F);
 	}
 	static int toLower(int ch) {
 		return isUpper(ch) ? (ch + 0x20) : ch;

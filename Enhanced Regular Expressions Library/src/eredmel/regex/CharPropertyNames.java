@@ -4,6 +4,7 @@
 package eredmel.regex;
 
 import java.util.HashMap;
+import java.util.function.Supplier;
 
 import eredmel.regex.CharProperty.All;
 import eredmel.regex.CharProperty.Category;
@@ -14,35 +15,17 @@ import eredmel.regex.CharProperty.Ctype;
  */
 class CharPropertyNames {
 	static CharProperty charPropertyFor(String name) {
-		CharPropertyFactory m = map.get(name);
-		return m == null ? null : m.make();
-	}
-	private static abstract class CharPropertyFactory {
-		abstract CharProperty make();
+		Supplier<CharProperty> m = map.get(name);
+		return m == null ? null : m.get();
 	}
 	private static void defCategory(String name, final int typeMask) {
-		map.put(name, new CharPropertyFactory() {
-			@Override
-			CharProperty make() {
-				return new Category(typeMask);
-			}
-		});
+		map.put(name, () -> new Category(typeMask));
 	}
 	private static void defRange(String name, final int lower, final int upper) {
-		map.put(name, new CharPropertyFactory() {
-			@Override
-			CharProperty make() {
-				return Pattern.rangeFor(lower, upper);
-			}
-		});
+		map.put(name, () -> Pattern.rangeFor(lower, upper));
 	}
 	private static void defCtype(String name, final int ctype) {
-		map.put(name, new CharPropertyFactory() {
-			@Override
-			CharProperty make() {
-				return new Ctype(ctype);
-			}
-		});
+		map.put(name, () -> new Ctype(ctype));
 	}
 	private static abstract class CloneableProperty extends CharProperty
 			implements Cloneable {
@@ -56,14 +39,9 @@ class CharPropertyNames {
 		}
 	}
 	private static void defClone(String name, final CloneableProperty p) {
-		map.put(name, new CharPropertyFactory() {
-			@Override
-			CharProperty make() {
-				return p.clone();
-			}
-		});
+		map.put(name, () -> p.clone());
 	}
-	private static final HashMap<String, CharPropertyFactory> map = new HashMap<>();
+	private static final HashMap<String, Supplier<CharProperty>> map = new HashMap<>();
 	static {
 		// Unicode character property aliases, defined in
 		// http://www.unicode.org/Public/UNIDATA/PropertyValueAliases.txt
@@ -144,12 +122,7 @@ class CharPropertyNames {
 						| (1 << Character.MODIFIER_LETTER)
 						| (1 << Character.OTHER_LETTER) | (1 << Character.DECIMAL_DIGIT_NUMBER)));
 		defRange("L1", 0x00, 0xFF); // Latin-1
-		map.put("all", new CharPropertyFactory() {
-			@Override
-			CharProperty make() {
-				return new All();
-			}
-		});
+		map.put("all", All::new);
 		// Posix regular expression character classes, defined in
 		// http://www.unix.org/onlinepubs/009695399/basedefs/xbd_chap09.html
 		defRange("ASCII", 0x00, 0x7F); // ASCII

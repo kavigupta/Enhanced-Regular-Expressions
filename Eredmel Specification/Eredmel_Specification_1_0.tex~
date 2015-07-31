@@ -1,0 +1,92 @@
+\documentclass{book}
+\usepackage[margin=1in]{geometry}
+\usepackage{xcolor}
+\usepackage{textcomp}
+
+\newcommand\code\texttt
+\newcommand{\codebox}[1]{\colorbox{black}{\textcolor{white}{\code{#1}}}}
+\newcommand{\bak}{\textbackslash}
+\newcommand{\til}{$\sim$}
+
+\begin{document}
+
+\title{Eredmel Specification}.
+\author{Kavi Gupta}
+\maketitle
+
+\chapter{Motivation}
+
+The purpose of Eredmel is simple: a programming language for single-use scripts that will \emph{never} be maintained by a group. Thus, ideas such as ``readability,'' ``there's only one way to do it''-type-standardization, and type safety are more or less irrelevant to its design.
+
+Eredmel's primary design philosophy is customizability. While some languages like Java will not let you overload operators, and some languages like C++ still cling to the idea that functions need to be in the form \codebox{<name>(<args>...)}. In Eredmel, on the other hand, functions and operators are defined through the use of Enhanced Regular Expressions\footnote{See the next chapter for more details}. Additionally, the Eredmel preprocessor and interpreter are designed to be as lightweight as possible, containing very little logic and inbuilt functions. Almost all of the utility of Eredmel comes from basic language features written into the libraries. Programmers can easily modify these features and develop their own ``flavors'' of Eredmel, which may end up looking nothing like each other.
+
+In other words, Eredmel is a language for an individual who wants to program their way, not someone else's way. As such, it is not recommended for use in large-scale programs with multiple editors.
+
+\chapter{Enhanced Regular Expressions}
+
+Enhanced Regular Expressions are basically regexes with two additions. First, matching parentheses can be recognized (with parentheses in quotes not counting). Second, any point in the regex can be asserted to be in or not in a quote.
+
+They are completely reverse-compatible with regular expressions, except tildes need to be escaped as \codebox{\bak\til}
+
+\section{Parenthesis Matching}
+The syntax of a parenthesis match consists of anchors which have the formats \codebox{\til(} and \codebox{\til)}, where \codebox{()} are replaced with any combination of parenthesis that are preloaded into the Eredmel engine. 
+
+These parentheses enforce matching. If a \codebox{\til(} is matched by the Enregex matcher, then the enregex match will fail if one of these conditions does not match. (Where all counts refer to generic parentheses, here represented by \codebox{()}, that are not in quotes).
+
+\begin{itemize}
+\item The final match does not have a corresponding \codebox{\til)}
+\item The text between the \codebox{\til(} and the final match's corresponding \codebox{\til)} contains an uneven number of \codebox{(}s and \codebox{)}s.
+\item The text between the \codebox{\til(} (Point A) and the final match's corresponding \codebox{\til)} (Point B) contains some Point C such that the number of \codebox{(}s between A and C is less than the number of \codebox{)}s between A and C.
+\end{itemize}
+
+These anchors are a simple part of the regex, so they can be used in alternations and repetitions
+
+\section{Quote Matching}
+The syntax of a quote match consists the formats \codebox{\til'} and \codebox{\til\^{}'}, where \codebox{'} is replaced by an open-- or close--quote symbol. The interpretation is as follows:
+
+\begin{itemize}
+\item If the quote symbol is an open quote, then it represents a positive match.
+\item If the quote symbol is a close quote that is not also an open quote, then it represents a negative match.
+\item A \codebox{\^{}} reverses the sign of the match.
+\end{itemize}
+
+Whether something is ``in a quote'' is defined by the following algorithm.
+
+\begin{itemize}
+\item The beginning of the string is not in a quote.
+\item A start quote character begins a quote unless it is escaped and the Enregex Type declares that it can be escaped
+\item A close quote character \emph{of the current quote type} ends a quote unless it is escaped and the Enregex Type declares that it can be escaped
+\end{itemize}
+
+A few examples are below, in which valid quote pairs are \codebox{''} and \codebox{!?}\footnote{This is a deliberately contrived example. These do not count as valid quotes in the Eredmel Default standard, which only recognizes \codebox{''}.}
+
+\begin{itemize}
+\item \codebox{a\til'} matches \codebox{'a'}
+\item \codebox{a\til\^{}'} does not match \codebox{'a'}
+\item \codebox{a\til\^{}'} matches \codebox{!a?}
+\item \codebox{a\til\^{}?} matches \codebox{!a?}
+\end{itemize}
+
+\chapter{The Eredmel Preprocessor}
+
+\section{Preprocessor Directives}
+
+\subsection{\codebox{include} Statements}
+
+\codebox{include "<name>.edmh"} or \codebox{include "<name>.edml"}
+
+\section{Preprocessor Steps}
+
+
+
+\subsection{The Linker}
+
+The first step the preprocessor executes is to run the linker. The linker searches the document and expands \codebox{include} statements to the contents of the directory, relative to this location (this is platform specific, but \codebox{..} should generally refer to the parent directory, etc.)
+
+Include statements expand to the empty string if their file has already been included in this one. This means that circular references are permissible because they don't actually get included an infinite number of times.
+
+\subsection{The Static Macro Expansion System}
+
+The static macro expansion
+
+\end{document}

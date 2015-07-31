@@ -14,6 +14,9 @@ import eredmel.regex.Pattern.TreeInfo;
  */
 abstract class CharProperty extends Node {
 	abstract boolean isSatisfiedBy(int ch);
+	/**
+	 * @return the set complement of this property
+	 */
 	CharProperty complement() {
 		return new CharProperty() {
 			@Override

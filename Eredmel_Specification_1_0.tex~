@@ -1,0 +1,9 @@
+\documentclass{article}
+\usepackage[margins=1in]{geometry}
+\usepackage{xcolor}
+
+\define{\code}[1]{\colorbox{black}{#1}}
+
+\begin{document}
+
+\end{document}

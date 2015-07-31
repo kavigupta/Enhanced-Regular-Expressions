@@ -2560,9 +2560,7 @@ public class RegExTest {
 	 * at the head of the file.
 	 */
 	private static void processFile(String fileName) throws Exception {
-		File testCases = new File(System.getProperty("test.src", "."),
-				fileName);
-		FileInputStream in = new FileInputStream(testCases);
+		InputStream in = RegExTest.class.getResourceAsStream(fileName);
 		BufferedReader r = new BufferedReader(new InputStreamReader(in));
 		while ((r.readLine()) != null) {
 			// Read a line for pattern
