@@ -799,6 +799,18 @@ public final class Matcher implements MatchResult {
 	 *         that does not exist in the pattern
 	 */
 	public Matcher appendReplacement(StringBuffer sb, String replacement) {
+		return appendReplacement(sb, replacement, false);
+	}
+	/**
+	 * 
+	 * 
+	 * @param sb
+	 * @param replacement
+	 * @param doubleDollar
+	 * @return
+	 */
+	public Matcher appendReplacement(StringBuffer sb, String replacement,
+			boolean doubleDollar) {
 		// If no match, return error
 		if (first < 0) throw new IllegalStateException("No match available");
 		// Process substitution string to replace group references with groups
@@ -806,7 +818,7 @@ public final class Matcher implements MatchResult {
 		StringBuilder result = new StringBuilder();
 		while (cursor < replacement.length()) {
 			char nextChar = replacement.charAt(cursor);
-			if (nextChar == '\\') {
+			if (nextChar == '\\' && !doubleDollar) {
 				cursor++;
 				if (cursor == replacement.length())
 					throw new IllegalArgumentException(
@@ -824,7 +836,10 @@ public final class Matcher implements MatchResult {
 							"Illegal group reference: group index is missing");
 				nextChar = replacement.charAt(cursor);
 				int refNum = -1;
-				if (nextChar == '{') {
+				if (nextChar == '$' && doubleDollar) {
+					result.append('$');
+					cursor++;
+				} else if (nextChar == '{') {
 					cursor++;
 					StringBuilder gsb = new StringBuilder();
 					while (cursor < replacement.length()) {
