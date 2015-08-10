@@ -799,7 +799,7 @@ public final class Matcher implements MatchResult {
 	 *         that does not exist in the pattern
 	 */
 	public Matcher appendReplacement(StringBuffer sb, String replacement) {
-		return appendReplacement(sb, replacement, false);
+		return appendReplacement(sb, replacement, false, false);
 	}
 	/**
 	 * 
@@ -810,7 +810,7 @@ public final class Matcher implements MatchResult {
 	 * @return
 	 */
 	public Matcher appendReplacement(StringBuffer sb, String replacement,
-			boolean doubleDollar) {
+			boolean doubleDollar, boolean onlyRepl) {
 		// If no match, return error
 		if (first < 0) throw new IllegalStateException("No match available");
 		// Process substitution string to replace group references with groups
@@ -908,7 +908,7 @@ public final class Matcher implements MatchResult {
 			}
 		}
 		// Append the intervening text
-		sb.append(text, lastAppendPosition, first);
+		if (!onlyRepl) sb.append(text, lastAppendPosition, first);
 		// Append the match substitution
 		sb.append(result);
 		lastAppendPosition = last;
