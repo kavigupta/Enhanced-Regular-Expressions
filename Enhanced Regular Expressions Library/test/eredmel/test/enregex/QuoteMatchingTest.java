@@ -53,4 +53,14 @@ public class QuoteMatchingTest {
 		assertMatch("~^'=", "/ab/=", new int[][] { { 4, 5 } });
 		assertMatch("~^'=", "/ab\\/ /=", new int[][] { { 7, 8 } });
 	}
+	/*
+	 * Supposedly to deal with a bug, but the bug didn't exist (as this test
+	 * proves)
+	 */
+	@Test
+	public void anchorInGroupTest() {
+		assertMatch(
+				"((?:\\+|-)?\\d+(?:\\.\\d*)?(?:e(?:\\+|-)?\\d+)?~^')\\s*\\+\\s*((?:\\+|-)?\\d+(?:\\.\\d*)?(?:e(?:\\+|-)?\\d+)?~^')",
+				"1.23e34 + -3.45e-34", new int[][] { { 0, 19 } });
+	}
 }
